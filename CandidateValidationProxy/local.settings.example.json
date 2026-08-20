@@ -1,0 +1,13 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "FUNCTIONS_WORKER_RUNTIME": "node",
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "IGENTIC_EXECUTOR_URL": "https://your-executor.azurewebsites.net/api/yourEndpoint/executor-id",
+    "IGENTIC_APP_ID": "your-app-id",
+    "IGENTIC_API_KEY": "your-api-key",
+    "IGENTIC_BEARER_TOKEN": "your-bearer-token",
+    "IGENTIC_USERNAME": "your-username@example.com",
+    "STREAMING_ENABLED": "false"
+  }
+}

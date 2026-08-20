@@ -1,0 +1,1180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Validation Report - {{ candidate_name }}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --black: #000000;
+    --dark-red: #8B0000;
+    --crimson: #B22222;
+    --white: #ffffff;
+    --light-gray: #f3f4f6;
+    --accent: #ff4d4f;
+    --primary-gradient: linear-gradient(135deg, #8B0000, #B22222, #000000);
+    --secondary-gradient: linear-gradient(135deg, #1a1a1a, #2d0000);
+    --card-bg: rgba(255, 255, 255, 0.95);
+    --glass-bg: rgba(255, 255, 255, 0.85);
+    --glass-border: rgba(255, 255, 255, 0.2);
+    --shadow-sm: 0 1px 3px rgba(0,0,0,0.12);
+    --shadow-md: 0 4px 12px rgba(0,0,0,0.15);
+    --shadow-lg: 0 8px 32px rgba(0,0,0,0.18);
+    --shadow-glow: 0 0 20px rgba(139, 0, 0, 0.15);
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 16px;
+    --radius-xl: 20px;
+    --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    --font: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    --green: #059669;
+    --amber: #d97706;
+    --red: #dc2626;
+    --gray: #6b7280;
+    --blue: #2563eb;
+    --green-bg: #ecfdf5;
+    --amber-bg: #fffbeb;
+    --red-bg: #fef2f2;
+    --gray-bg: #f9fafb;
+    --blue-bg: #eff6ff;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: var(--font); line-height: 1.6; color: #1f2937; background: #0a0a0a; min-height: 100vh; }
+  .container { max-width: 1240px; margin: 0 auto; padding: 2rem 1.5rem; animation: fadeIn 0.6s ease-out; }
+
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes slideDown { from { opacity: 0; max-height: 0; } to { opacity: 1; max-height: 2000px; } }
+  @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.05); } }
+  @keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+  @keyframes countUp { from { opacity: 0; transform: scale(0.5); } to { opacity: 1; transform: scale(1); } }
+  @keyframes glowPulse { 0%, 100% { box-shadow: 0 0 20px rgba(139,0,0,0.2); } 50% { box-shadow: 0 0 40px rgba(139,0,0,0.4); } }
+
+  /* ── Header ── */
+  header {
+    background: var(--primary-gradient);
+    color: var(--white);
+    padding: 3rem 2.5rem 2.5rem;
+    border-radius: var(--radius-xl);
+    margin-bottom: 2rem;
+    position: relative;
+    overflow: hidden;
+    box-shadow: var(--shadow-lg), var(--shadow-glow);
+  }
+  header::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    right: -20%;
+    width: 400px;
+    height: 400px;
+    background: radial-gradient(circle, rgba(255,255,255,0.08) 0%, transparent 70%);
+    border-radius: 50%;
+    pointer-events: none;
+  }
+  header::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: linear-gradient(90deg, var(--accent), var(--crimson), transparent);
+  }
+  header .glass-bar {
+    background: rgba(255,255,255,0.1);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: var(--radius-md);
+    padding: 1.5rem 2rem;
+    position: relative;
+    z-index: 1;
+  }
+  header h1 {
+    font-size: 2.2rem;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    margin-bottom: 0.2rem;
+    background: linear-gradient(135deg, #fff, #ffb3b3);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  header .subtitle {
+    font-size: 1rem;
+    font-weight: 400;
+    opacity: 0.75;
+    letter-spacing: 0.02em;
+  }
+  header .meta {
+    display: flex;
+    gap: 1.5rem;
+    margin-top: 1.25rem;
+    font-size: 0.82rem;
+    opacity: 0.8;
+    flex-wrap: wrap;
+  }
+  header .meta span {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+  }
+  header .meta span::before {
+    content: '';
+    display: inline-block;
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--accent);
+  }
+
+  /* ── Recommendation Banner ── */
+  .recommendation-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--card-bg);
+    backdrop-filter: blur(10px);
+    border-radius: var(--radius-lg);
+    padding: 1.5rem 2rem;
+    margin-bottom: 2rem;
+    box-shadow: var(--shadow-md);
+    border-left: 6px solid var(--gray);
+    transition: var(--transition);
+    position: relative;
+    overflow: hidden;
+  }
+  .recommendation-banner:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); }
+  .recommendation-banner::after {
+    content: '';
+    position: absolute;
+    top: 0; right: 0;
+    width: 120px; height: 100%;
+    background: linear-gradient(135deg, transparent, rgba(0,0,0,0.02));
+    pointer-events: none;
+  }
+  .recommendation-banner.CLEAR { border-left-color: var(--green); }
+  .recommendation-banner.REVIEW { border-left-color: var(--amber); }
+  .recommendation-banner.REJECT { border-left-color: var(--red); }
+  .recommendation-banner .rec-label { font-size: 0.72rem; color: var(--gray); font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; }
+  .recommendation-banner .rec-value { font-size: 1.6rem; font-weight: 800; }
+  .recommendation-banner .rec-value.CLEAR { color: var(--green); }
+  .recommendation-banner .rec-value.REVIEW { color: var(--amber); }
+  .recommendation-banner .rec-value.REJECT { color: var(--red); }
+  .recommendation-banner .rec-reason { font-size: 0.9rem; color: #4b5563; flex: 1; margin-left: 1.5rem; line-height: 1.5; }
+
+  /* ── Score Dashboard ── */
+  .score-dashboard {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 1rem;
+    margin-bottom: 2rem;
+  }
+  .score-card {
+    background: var(--card-bg);
+    backdrop-filter: blur(10px);
+    border-radius: var(--radius-lg);
+    padding: 1.5rem 1rem;
+    box-shadow: var(--shadow-sm);
+    text-align: center;
+    transition: var(--transition);
+    position: relative;
+    overflow: hidden;
+    cursor: default;
+  }
+  .score-card:hover {
+    transform: translateY(-6px);
+    box-shadow: var(--shadow-lg);
+  }
+  .score-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+    transition: var(--transition);
+  }
+  .score-card:hover::before { height: 4px; }
+  .score-card .score-icon {
+    width: 56px; height: 56px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 0.75rem;
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: var(--white);
+    transition: var(--transition);
+  }
+  .score-card:hover .score-icon { transform: scale(1.1); }
+  .score-card .score-icon.high { background: linear-gradient(135deg, #059669, #10b981); box-shadow: 0 4px 12px rgba(5,150,105,0.3); }
+  .score-card .score-icon.medium { background: linear-gradient(135deg, #d97706, #f59e0b); box-shadow: 0 4px 12px rgba(217,119,6,0.3); }
+  .score-card .score-icon.low { background: linear-gradient(135deg, #dc2626, #ef4444); box-shadow: 0 4px 12px rgba(220,38,38,0.3); }
+  .score-card .score-icon.risk-low { background: linear-gradient(135deg, #059669, #34d399); box-shadow: 0 4px 12px rgba(5,150,105,0.3); }
+  .score-card .score-icon.risk-medium { background: linear-gradient(135deg, #d97706, #fbbf24); box-shadow: 0 4px 12px rgba(217,119,6,0.3); }
+  .score-card .score-icon.risk-high { background: linear-gradient(135deg, #dc2626, #f87171); box-shadow: 0 4px 12px rgba(220,38,38,0.3); }
+  .score-card .score-value {
+    font-size: 1.8rem;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    line-height: 1.1;
+    animation: countUp 0.5s ease-out;
+  }
+  .score-card .score-value.high { color: var(--green); }
+  .score-card .score-value.medium { color: var(--amber); }
+  .score-card .score-value.low { color: var(--red); }
+  .score-card .score-label {
+    font-size: 0.68rem;
+    color: var(--gray);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-top: 0.3rem;
+  }
+
+  /* ── Status Badges ── */
+  .status-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.3rem 0.85rem;
+    border-radius: 9999px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .status-indicator.PASSED { background: #d1fae5; color: #065f46; }
+  .status-indicator.FAILED { background: #fee2e2; color: #991b1b; }
+  .status-indicator.WARNING { background: #fef3c7; color: #92400e; }
+  .status-indicator.SKIPPED { background: #f3f4f6; color: #6b7280; }
+  .status-indicator.NOT_EVALUATED { background: #eef2ff; color: #4338ca; }
+
+  /* ── Executive Summary ── */
+  .exec-summary {
+    background: var(--secondary-gradient);
+    border-radius: var(--radius-lg);
+    padding: 2rem;
+    margin-bottom: 2rem;
+    box-shadow: var(--shadow-md);
+    color: var(--white);
+    position: relative;
+    overflow: hidden;
+  }
+  .exec-summary::before {
+    content: '';
+    position: absolute;
+    top: -100px; right: -100px;
+    width: 300px; height: 300px;
+    background: radial-gradient(circle, rgba(139,0,0,0.2) 0%, transparent 70%);
+    border-radius: 50%;
+    pointer-events: none;
+  }
+  .exec-summary h2 {
+    font-size: 1.2rem;
+    font-weight: 700;
+    margin-bottom: 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--white);
+  }
+  .exec-summary h2::before {
+    content: '';
+    display: inline-block;
+    width: 4px;
+    height: 20px;
+    background: var(--accent);
+    border-radius: 2px;
+  }
+  .exec-summary p {
+    font-size: 1rem;
+    line-height: 1.8;
+    opacity: 0.9;
+    max-width: 800px;
+  }
+  .exec-summary .tag-container { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1rem; }
+  .exec-summary .tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.35rem 0.75rem;
+    border-radius: var(--radius-sm);
+    font-size: 0.8rem;
+    font-weight: 600;
+  }
+  .exec-summary .tag.green { background: rgba(5,150,105,0.2); color: #6ee7b7; border: 1px solid rgba(5,150,105,0.3); }
+  .exec-summary .tag.red { background: rgba(220,38,38,0.2); color: #fca5a5; border: 1px solid rgba(220,38,38,0.3); }
+
+  /* ── Strengths & Weaknesses ── */
+  .sw-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 2rem; }
+  .sw-card {
+    border-radius: var(--radius-md);
+    padding: 1.25rem 1.5rem;
+    box-shadow: var(--shadow-sm);
+    transition: var(--transition);
+  }
+  .sw-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-md); }
+  .sw-card h3 {
+    font-size: 0.9rem;
+    font-weight: 700;
+    margin-bottom: 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .sw-card h3 .icon { width: 24px; height: 24px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 700; color: var(--white); flex-shrink: 0; }
+  .sw-card ul { list-style: none; padding: 0; display: flex; flex-wrap: wrap; gap: 0.4rem; }
+  .sw-card ul li {
+    padding: 0.3rem 0.65rem;
+    border-radius: var(--radius-sm);
+    font-size: 0.82rem;
+    font-weight: 500;
+  }
+  .sw-card.strengths { background: var(--green-bg); border: 1px solid rgba(5,150,105,0.2); }
+  .sw-card.strengths h3 .icon { background: var(--green); }
+  .sw-card.strengths ul li { background: rgba(5,150,105,0.1); color: #065f46; }
+  .sw-card.weaknesses { background: var(--red-bg); border: 1px solid rgba(220,38,38,0.2); }
+  .sw-card.weaknesses h3 .icon { background: var(--red); }
+  .sw-card.weaknesses ul li { background: rgba(220,38,38,0.1); color: #991b1b; }
+
+  /* ── Category Scores ── */
+  .category-scores {
+    background: var(--card-bg);
+    backdrop-filter: blur(10px);
+    border-radius: var(--radius-lg);
+    padding: 1.5rem 2rem;
+    margin-bottom: 2rem;
+    box-shadow: var(--shadow-sm);
+  }
+  .category-scores h3 {
+    font-size: 1rem;
+    font-weight: 700;
+    color: #1f2937;
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .category-scores h3::before {
+    content: '';
+    display: inline-block;
+    width: 4px;
+    height: 18px;
+    background: var(--dark-red);
+    border-radius: 2px;
+  }
+  .category-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 0.75rem; }
+  .category-item {
+    padding: 0.85rem 1rem;
+    background: var(--light-gray);
+    border-radius: var(--radius-sm);
+    border: 1px solid #e5e7eb;
+    transition: var(--transition);
+  }
+  .category-item:hover { border-color: var(--dark-red); background: #fef2f2; }
+  .category-item .cat-name { font-size: 0.72rem; color: var(--gray); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+  .category-item .cat-score { font-size: 1.25rem; font-weight: 800; margin-top: 0.15rem; }
+  .category-item .cat-score.good { color: var(--green); }
+  .category-item .cat-score.warn { color: var(--amber); }
+  .category-item .cat-score.bad { color: var(--red); }
+  .category-item .cat-bar { height: 5px; border-radius: 3px; margin-top: 0.4rem; background: #e5e7eb; overflow: hidden; }
+  .category-item .cat-bar-fill { height: 100%; border-radius: 3px; transition: width 1s ease-out; }
+  .category-item .cat-bar-fill.good { background: linear-gradient(90deg, #059669, #34d399); }
+  .category-item .cat-bar-fill.warn { background: linear-gradient(90deg, #d97706, #fbbf24); }
+  .category-item .cat-bar-fill.bad { background: linear-gradient(90deg, #dc2626, #f87171); }
+
+  /* ── Charts ── */
+  .chart-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 2rem; }
+  .chart-box {
+    background: var(--card-bg);
+    backdrop-filter: blur(10px);
+    border-radius: var(--radius-lg);
+    padding: 1.5rem;
+    box-shadow: var(--shadow-sm);
+    transition: var(--transition);
+  }
+  .chart-box:hover { box-shadow: var(--shadow-md); }
+  .chart-box h3 { font-size: 0.85rem; font-weight: 700; color: #374151; margin-bottom: 0.75rem; }
+  .chart-box canvas { max-height: 220px; max-width: 100%; }
+
+  /* ── Accordion Sections ── */
+  .section {
+    background: var(--card-bg);
+    backdrop-filter: blur(10px);
+    border-radius: var(--radius-lg);
+    margin-bottom: 0.75rem;
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+    border: 1px solid rgba(0,0,0,0.06);
+    transition: var(--transition);
+  }
+  .section:hover { box-shadow: var(--shadow-md); }
+  .section-header {
+    padding: 1.1rem 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    cursor: pointer;
+    user-select: none;
+    transition: var(--transition);
+    position: relative;
+  }
+  .section-header:hover { background: #fafafa; }
+  .section-header:focus-visible { outline: 2px solid var(--dark-red); outline-offset: -2px; }
+  .section-header h2 { font-size: 0.95rem; font-weight: 600; flex: 1; color: #1f2937; }
+  .section-header .toggle-icon {
+    width: 28px; height: 28px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 50%;
+    background: var(--light-gray);
+    transition: var(--transition);
+    font-size: 0.7rem;
+    color: var(--gray);
+    flex-shrink: 0;
+  }
+  .section-header .toggle-icon.open { transform: rotate(90deg); background: var(--dark-red); color: var(--white); }
+  .section-body {
+    padding: 0 1.5rem 1.5rem;
+    animation: slideDown 0.3s ease-out;
+  }
+  .section-body.collapsed { display: none; }
+
+  .checks-list { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0 0 0.75rem; }
+  .check-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.25rem 0.6rem;
+    border-radius: 4px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    background: #f3f4f6;
+    color: #4b5563;
+  }
+  .check-tag.done { background: #ecfdf5; color: #065f46; }
+
+  .evidence-item {
+    padding: 0.6rem 0.85rem;
+    margin-bottom: 0.35rem;
+    border-radius: var(--radius-sm);
+    font-size: 0.85rem;
+    border-left: 3px solid #d1d5db;
+    background: var(--gray-bg);
+    transition: var(--transition);
+  }
+  .evidence-item:hover { padding-left: 1.1rem; }
+  .evidence-item.PASSED { border-left-color: var(--green); background: var(--green-bg); }
+  .evidence-item.FAILED { border-left-color: var(--red); background: var(--red-bg); }
+  .evidence-item.WARNING { border-left-color: var(--amber); background: var(--amber-bg); }
+  .evidence-item.SKIPPED { border-left-color: var(--gray); background: var(--gray-bg); }
+  .evidence-item.NOT_EVALUATED { border-left-color: var(--blue); background: var(--blue-bg); }
+  .evidence-empty { color: var(--gray); font-style: italic; font-size: 0.88rem; padding: 0.5rem 0; }
+
+  .subsection { margin-top: 0.75rem; }
+  .subsection-title {
+    font-size: 0.8rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 0.4rem;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+  .subsection-title .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+
+  .detail-grid-wrapper { margin-top: 0.75rem; border-radius: var(--radius-sm); overflow: hidden; border: 1px solid #e5e7eb; }
+  .detail-grid { width: 100%; border-collapse: collapse; font-size: 0.83rem; }
+  .detail-grid thead { position: sticky; top: 0; z-index: 1; }
+  .detail-grid thead th {
+    background: var(--secondary-gradient);
+    color: var(--white);
+    padding: 0.55rem 0.85rem;
+    text-align: left;
+    font-weight: 600;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .detail-grid tbody tr { transition: var(--transition); }
+  .detail-grid tbody tr:nth-child(even) { background: #fafafa; }
+  .detail-grid tbody tr:hover { background: #fef2f2; }
+  .detail-grid tbody td { padding: 0.5rem 0.85rem; border-bottom: 1px solid #f3f4f6; }
+  .detail-grid tbody td:first-child { font-weight: 600; color: #4b5563; white-space: nowrap; }
+  .detail-grid tbody td:last-child { color: #1f2937; }
+  .detail-grid-wrapper { max-height: 400px; overflow-y: auto; }
+  .detail-grid-wrapper::-webkit-scrollbar { width: 6px; }
+  .detail-grid-wrapper::-webkit-scrollbar-track { background: #f3f4f6; }
+  .detail-grid-wrapper::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 3px; }
+
+  .recruiter-action-box {
+    margin-top: 0.75rem;
+    padding: 1rem 1.25rem;
+    border-radius: var(--radius-sm);
+    font-size: 0.85rem;
+    border: 1px solid;
+    transition: var(--transition);
+  }
+  .recruiter-action-box strong { display: block; margin-bottom: 0.25rem; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em; }
+  .recruiter-action-box.failure { background: #fef2f2; border-color: #fecaca; }
+  .recruiter-action-box.failure strong { color: var(--red); }
+  .recruiter-action-box.impact { background: #f0fdf4; border-color: #bbf7d0; }
+  .recruiter-action-box.impact strong { color: var(--green); }
+  .recruiter-action-box.review { background: #fffbeb; border-color: #fde68a; }
+  .recruiter-action-box.review strong { color: var(--amber); }
+
+  .validation-error-box { margin-top: 0.75rem; padding: 0.75rem 1rem; background: #fef2f2; border: 1px solid #fecaca; border-radius: var(--radius-sm); font-size: 0.82rem; color: #991b1b; }
+  .validation-error-box strong { display: block; margin-bottom: 0.15rem; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--red); }
+
+  /* ── Recruiter Notes ── */
+  .recruiter-notes-section {
+    background: var(--card-bg);
+    border-radius: var(--radius-lg);
+    padding: 1.5rem 2rem;
+    margin-bottom: 2rem;
+    box-shadow: var(--shadow-sm);
+    border: 1px solid #e5e7eb;
+  }
+  .recruiter-notes-section h2 {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: #1f2937;
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .recruiter-notes-section h2::before {
+    content: '';
+    display: inline-block;
+    width: 4px;
+    height: 18px;
+    background: var(--blue);
+    border-radius: 2px;
+  }
+  .note-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 0.6rem; }
+
+  /* ── Technical Interview Questions ── */
+  .interview-table-wrapper { overflow-x: auto; }
+  .interview-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  .interview-table thead { background: #1f2937; color: #fff; }
+  .interview-table th { padding: 0.7rem 1rem; text-align: left; font-weight: 600; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; }
+  .interview-table td { padding: 0.7rem 1rem; border-bottom: 1px solid #e5e7eb; vertical-align: top; }
+  .interview-table tbody tr:hover { background: #f9fafb; }
+  .interview-table tbody tr:last-child td { border-bottom: none; }
+  .tech-badge { display: inline-block; padding: 0.2rem 0.55rem; font-size: 0.75rem; font-weight: 600; border-radius: 4px; background: #eef2ff; color: #4338ca; white-space: nowrap; }
+  .diff-badge { display: inline-block; padding: 0.2rem 0.55rem; font-size: 0.75rem; font-weight: 600; border-radius: 4px; white-space: nowrap; }
+  .diff-badge.easy { background: #ecfdf5; color: #059669; }
+  .diff-badge.medium { background: #fffbeb; color: #d97706; }
+  .diff-badge.hard { background: #fef2f2; color: #dc2626; }
+  .reason-cell { color: #6b7280; font-style: italic; font-size: 0.82rem; }
+  .note-card {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.6rem;
+    padding: 0.85rem 1rem;
+    background: var(--blue-bg);
+    border: 1px solid rgba(37,99,235,0.15);
+    border-radius: var(--radius-sm);
+    font-size: 0.85rem;
+    color: #1e40af;
+    line-height: 1.5;
+    transition: var(--transition);
+  }
+  .note-card:hover { border-color: var(--blue); background: #dbeafe; transform: translateY(-2px); }
+  .note-card .note-icon { width: 20px; height: 20px; border-radius: 50%; background: var(--blue); color: var(--white); display: flex; align-items: center; justify-content: center; font-size: 0.65rem; font-weight: 700; flex-shrink: 0; margin-top: 0.1rem; }
+
+  /* ── Previous Report ── */
+  .previous-report {
+    background: #f0f9ff;
+    border: 1px solid #bae6fd;
+    border-radius: var(--radius-sm);
+    padding: 1rem;
+    margin-top: 0.5rem;
+    font-size: 0.85rem;
+  }
+  .previous-report h4 { font-size: 0.82rem; color: #0369a1; margin-bottom: 0.5rem; }
+  .previous-report a { color: var(--blue); text-decoration: none; font-weight: 500; }
+  .previous-report a:hover { text-decoration: underline; }
+
+  /* ── Footer ── */
+  footer {
+    background: var(--secondary-gradient);
+    border-radius: var(--radius-lg);
+    padding: 2rem 2rem 1.5rem;
+    margin-top: 2rem;
+    color: rgba(255,255,255,0.7);
+    font-size: 0.78rem;
+    text-align: center;
+    box-shadow: var(--shadow-md);
+  }
+  footer .footer-title { font-size: 0.85rem; font-weight: 600; color: rgba(255,255,255,0.9); margin-bottom: 0.75rem; }
+  footer .footer-row { display: flex; justify-content: center; gap: 1.25rem; flex-wrap: wrap; margin-top: 0.5rem; }
+  footer .footer-row span { display: flex; align-items: center; gap: 0.3rem; }
+  footer .footer-row span::before { content: '|'; opacity: 0.3; }
+  footer .footer-row span:first-child::before { content: none; }
+
+  /* ── Print ── */
+  @media print {
+    body { background: #fff; color: #000; }
+    header { background: #1a1a1a !important; -webkit-text-fill-color: #fff; break-inside: avoid; box-shadow: none; }
+    header h1 { -webkit-text-fill-color: #fff; }
+    .container { max-width: 100%; padding: 0.5in; animation: none; }
+    .score-card, .section, .exec-summary, .category-scores, .chart-box, .recruiter-notes-section, footer { break-inside: avoid; box-shadow: none; border: 1px solid #ccc; }
+    .score-card:hover, .section:hover { transform: none; }
+    .section-body.collapsed { display: block !important; }
+    .toggle-icon { display: none !important; }
+    .chart-box canvas { max-height: 150px; }
+    .detail-grid-wrapper { max-height: none; overflow: visible; }
+    footer { background: #1a1a1a !important; }
+    @page { margin: 0.5in; }
+  }
+
+  /* ── Responsive ── */
+  @media (max-width: 1024px) {
+    .container { padding: 1.5rem 1rem; }
+    header { padding: 2rem 1.5rem 1.75rem; }
+    header h1 { font-size: 1.7rem; }
+    .sw-grid { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 768px) {
+    .chart-row { grid-template-columns: 1fr; }
+    .score-dashboard { grid-template-columns: repeat(3, 1fr); }
+    .recommendation-banner { flex-direction: column; align-items: flex-start; gap: 0.75rem; }
+    .recommendation-banner .rec-reason { margin-left: 0; }
+    .detail-grid-wrapper { max-height: 300px; }
+    header .meta { gap: 0.75rem; }
+    footer .footer-row { flex-direction: column; gap: 0.4rem; align-items: center; }
+    footer .footer-row span::before { content: none; }
+  }
+  @media (max-width: 480px) {
+    .container { padding: 1rem 0.75rem; }
+    header { padding: 1.5rem 1rem; border-radius: var(--radius-lg); }
+    header h1 { font-size: 1.3rem; }
+    header .glass-bar { padding: 1rem 1.25rem; }
+    .score-dashboard { grid-template-columns: repeat(2, 1fr); gap: 0.6rem; }
+    .score-card { padding: 1rem 0.75rem; }
+    .score-card .score-value { font-size: 1.4rem; }
+    .category-grid { grid-template-columns: 1fr; }
+    .section-header { padding: 0.85rem 1rem; }
+    .section-body { padding: 0 1rem 1rem; }
+    .note-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+{% set llm = llm_analysis or {} %}
+{% set rec = llm.get('recommendation', 'REVIEW') %}
+{% set rec_reason = llm.get('decision_reason', '') %}
+
+{% set results = validation_result or {} %}
+{% if results.get('results') %}{% set results = results['results'] %}{% endif %}
+{% if results.get('validation') %}{% set results = results['validation'] %}{% endif %}
+
+{% set counts = {'passed': 0, 'failed': 0, 'warning': 0, 'skipped': 0} %}
+{% for key, val in results.items() %}
+  {% if val is mapping and val.get('status') %}
+    {% set s = val['status'] %}
+    {% if s == 'PASSED' %}{% set _ = counts.update({'passed': counts.passed + 1}) %}{% endif %}
+    {% if s == 'FAILED' %}{% set _ = counts.update({'failed': counts.failed + 1}) %}{% endif %}
+    {% if s == 'WARNING' %}{% set _ = counts.update({'warning': counts.warning + 1}) %}{% endif %}
+    {% if s == 'SKIPPED' %}{% set _ = counts.update({'skipped': counts.skipped + 1}) %}{% endif %}
+  {% endif %}
+{% endfor %}
+
+{% set total = counts.passed + counts.failed + counts.warning + counts.skipped %}
+{% set pass_pct = (counts.passed / total * 100) | round if total > 0 else 0 %}
+{% set fail_pct = (counts.failed / total * 100) | round if total > 0 else 0 %}
+
+<script>
+var validationData = {{ validation_result | tojson }};
+var llmAnalysis = {{ llm_analysis | tojson }};
+</script>
+
+<header>
+  <div class="glass-bar">
+    <h1>Candidate Validation Report</h1>
+    <div class="subtitle">Enterprise Candidate Screening &amp; Verification</div>
+    <div class="meta">
+      <span><strong>Candidate:</strong> {{ candidate_info.get('name') or candidate_name }}</span>
+      <span><strong>ID:</strong> {{ candidate_id }}</span>
+      {% if candidate_info.get('email') %}<span><strong>Email:</strong> {{ candidate_info.get('email') }}</span>{% endif %}
+      {% if candidate_info.get('phone') %}<span><strong>Phone:</strong> {{ candidate_info.get('phone') }}</span>{% endif %}
+      {% if candidate_info.get('position') %}<span><strong>Position:</strong> {{ candidate_info.get('position') }}</span>{% endif %}
+      <span><strong>Generated:</strong> {{ generated_at }}</span>
+      <span><strong>Version:</strong> 2.0</span>
+    </div>
+  </div>
+</header>
+
+<div class="recommendation-banner {{ rec }}" role="alert" aria-live="polite">
+  <div>
+    <div class="rec-label">Recommendation</div>
+    <div class="rec-value {{ rec }}">{{ rec }}</div>
+  </div>
+  {% if rec_reason %}
+  <div class="rec-reason">{{ rec_reason }}</div>
+  {% endif %}
+</div>
+
+<div class="score-dashboard" role="region" aria-label="Score dashboard">
+  {% set vs = llm.get('validation_score', 0) %}
+  {% set cs = llm.get('confidence_score', 0) %}
+  {% set fs = llm.get('fraud_score', 0) %}
+  {% set cos = llm.get('company_score', 0) %}
+  {% set ls = llm.get('linkedin_score', 0) %}
+  {% set os = llm.get('overall_score', 0) %}
+  {% set rl = llm.get('risk_level', 'Unknown') %}
+
+  {% macro score_class(s) %}
+    {% if s is number and s >= 70 %}high{% elif s is number and s >= 40 %}medium{% else %}low{% endif %}
+  {% endmacro %}
+
+  {% macro risk_class(rl) %}
+    {% if rl == 'LOW' %}risk-low{% elif rl == 'MEDIUM' %}risk-medium{% else %}risk-high{% endif %}
+  {% endmacro %}
+
+  <div class="score-card" tabindex="0">
+    <div class="score-icon {{ score_class(os) }}">S</div>
+    <div class="score-value {{ score_class(os) }}">{{ os }}</div>
+    <div class="score-label">Overall Score</div>
+  </div>
+  <div class="score-card" tabindex="0">
+    <div class="score-icon {{ score_class(vs) }}">V</div>
+    <div class="score-value {{ score_class(vs) }}">{{ vs }}</div>
+    <div class="score-label">Validation Score</div>
+  </div>
+  <div class="score-card" tabindex="0">
+    <div class="score-icon {{ score_class(cs) }}">C</div>
+    <div class="score-value {{ score_class(cs) }}">{{ cs }}</div>
+    <div class="score-label">Confidence Score</div>
+  </div>
+  <div class="score-card" tabindex="0">
+    <div class="score-icon {{ score_class(fs) }}">F</div>
+    <div class="score-value {{ score_class(fs) }}">{{ fs }}</div>
+    <div class="score-label">Fraud Score</div>
+  </div>
+  <div class="score-card" tabindex="0">
+    <div class="score-icon {{ score_class(cos) }}">C</div>
+    <div class="score-value {{ score_class(cos) }}">{{ cos }}</div>
+    <div class="score-label">Company Score</div>
+  </div>
+  <div class="score-card" tabindex="0">
+    <div class="score-icon {{ risk_class(rl) }}">R</div>
+    <div class="score-value {{ score_class(100 if rl == 'LOW' else (50 if rl == 'MEDIUM' else 20)) }}" style="font-size:1.2rem">{{ rl }}</div>
+    <div class="score-label">Risk Level</div>
+  </div>
+  <div class="score-card" tabindex="0">
+    <div class="score-icon {{ score_class(ls) }}">L</div>
+    <div class="score-value {{ score_class(ls) }}">{{ ls }}</div>
+    <div class="score-label">LinkedIn Score</div>
+  </div>
+</div>
+
+{% set exec_summary = llm.get('executive_summary', '') %}
+{% if exec_summary %}
+<div class="exec-summary" role="region" aria-label="Executive summary">
+  <h2>Executive Summary</h2>
+  <p>{{ exec_summary }}</p>
+</div>
+{% endif %}
+
+{% set strengths = llm.get('strengths', []) %}
+{% set weaknesses = llm.get('weaknesses', []) %}
+{% if strengths or weaknesses %}
+<div class="sw-grid">
+  {% if strengths %}
+  <div class="sw-card strengths" role="region" aria-label="Strengths">
+    <h3><span class="icon" aria-hidden="true">&#10003;</span> Strengths</h3>
+    <ul>
+    {% for s in strengths %}
+      <li>{{ s }}</li>
+    {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+  {% if weaknesses %}
+  <div class="sw-card weaknesses" role="region" aria-label="Weaknesses">
+    <h3><span class="icon" aria-hidden="true">&#9888;</span> Weaknesses</h3>
+    <ul>
+    {% for w in weaknesses %}
+      <li>{{ w }}</li>
+    {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+
+{% set category_scores = llm.get('category_scores', {}) %}
+{% if category_scores and category_scores.keys() | length > 0 %}
+<div class="category-scores" role="region" aria-label="Category scores">
+  <h3>Validation Category Scores</h3>
+  <div class="category-grid">
+  {% for cat_name, cat_score in category_scores.items() %}
+    {% set cs_int = cat_score | int %}
+    {% set cat_class = 'good' if cs_int >= 70 else ('warn' if cs_int >= 40 else 'bad') %}
+    <div class="category-item">
+      <div class="cat-name">{{ cat_name | replace('_', ' ') }}</div>
+      <div class="cat-score {{ cat_class }}">{{ cs_int }}</div>
+      <div class="cat-bar"><div class="cat-bar-fill {{ cat_class }}" style="width: {{ cs_int }}%"></div></div>
+    </div>
+  {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<div class="chart-row" role="region" aria-label="Validation charts">
+  <div class="chart-box">
+    <h3>Validation Status Distribution</h3>
+    <canvas id="statusChart" aria-label="Doughnut chart showing pass, fail, warning, skipped counts"></canvas>
+  </div>
+  <div class="chart-box">
+    <h3>Pass Rate</h3>
+    <canvas id="passRateChart" aria-label="Doughnut chart showing pass rate"></canvas>
+  </div>
+</div>
+
+{% set ordered = [] %}
+{% for key, val in results.items() %}
+  {% if val is mapping and val.get('status') is not none %}
+    {% set _ = ordered.append({'key': key, 'val': val}) %}
+  {% endif %}
+{% endfor %}
+
+{% for item in ordered %}
+  {% set key = item.key %}
+  {% set val = item.val %}
+  {% set status = val['status'] %}
+  {% set ev = val.get('evidence', []) %}
+  {% set det = val.get('details') or {} %}
+  {% set checks = det.get('checks_performed', val.get('checks_performed', [])) %}
+  {% set failure_reason = val.get('failure_reason', det.get('failure_reason', det.get('reason', val.get('reason', '')))) %}
+  {% set warnings_list = val.get('warnings', det.get('warnings', [])) %}
+  {% set issues_list = val.get('issues', det.get('issues', [])) %}
+  {% set impact = val.get('impact', det.get('impact', '')) %}
+  {% set recruiter_action = val.get('recruiter_action', val.get('suggested_recruiter_action', det.get('recruiter_recommendation', ''))) %}
+  {% set missing_info = det.get('missing_information', []) %}
+  {% set val_error = det.get('validation_error', '') %}
+
+  <div class="section">
+    <div class="section-header" onclick="toggleSection(this)" onkeydown="if(event.key==='Enter'||event.key===' ') { event.preventDefault(); toggleSection(this); }" role="button" tabindex="0" aria-expanded="true" aria-controls="section-{{ loop.index }}">
+      <span class="status-indicator {{ status }}">{{ status }}</span>
+      <h2>{{ key | replace('_', ' ') | title }}</h2>
+      <span class="toggle-icon open" aria-hidden="true">&#9654;</span>
+    </div>
+    <div class="section-body" id="section-{{ loop.index }}" role="region" aria-label="{{ key | replace('_', ' ') | title }} details">
+
+      {% if checks and checks is iterable and checks is not string %}
+      <div class="checks-list">
+        {% for c in checks if c and c|trim %}
+        <span class="check-tag done">&#10003; {{ c|trim }}</span>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      {% for e in ev if e and e|trim %}
+        <div class="evidence-item {{ status }}">{{ e|trim }}</div>
+      {% else %}
+        <p class="evidence-empty">No issues found. All checks {{ status | lower }}.</p>
+      {% endfor %}
+
+      {% if warnings_list and warnings_list is iterable and warnings_list is not string and warnings_list | length > 0 %}
+      <div class="subsection">
+        <div class="subsection-title"><span class="dot" style="background:var(--amber)"></span> Warnings</div>
+        {% for w in warnings_list if w and w|trim %}
+        <div class="evidence-item WARNING">{{ w|trim }}</div>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      {% if issues_list and issues_list is iterable and issues_list is not string and issues_list | length > 0 %}
+      <div class="subsection">
+        <div class="subsection-title"><span class="dot" style="background:var(--red)"></span> Issues</div>
+        {% for i in issues_list if i and i|trim %}
+        <div class="evidence-item FAILED">{{ i|trim }}</div>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      {% if missing_info and missing_info is iterable and missing_info is not string and missing_info | length > 0 %}
+      <div class="subsection">
+        <div class="subsection-title"><span class="dot" style="background:var(--gray)"></span> Missing Information</div>
+        {% for mi in missing_info if mi and mi|trim %}
+        <div class="evidence-item SKIPPED">{{ mi|trim }}</div>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      {% if det and det is mapping %}
+
+        {% set phone_obj = det.get('phone') %}
+        {% if phone_obj is mapping and phone_obj.get('phone') %}
+        <div class="subsection">
+          <div class="subsection-title"><span class="dot" style="background:var(--dark-red)"></span> Phone Details</div>
+          <div class="detail-grid-wrapper">
+            <table class="detail-grid" role="table">
+              <thead><tr><th>Field</th><th>Value</th></tr></thead>
+              <tbody>
+                <tr><td>Phone</td><td>{{ phone_obj.get('phone', 'N/A') }}</td></tr>
+                <tr><td>Country Code</td><td>{{ phone_obj.get('country_code', 'N/A') }}</td></tr>
+                <tr><td>National Number</td><td>{{ phone_obj.get('national_number', 'N/A') }}</td></tr>
+                <tr><td>Country</td><td>{{ phone_obj.get('country', 'N/A') }}</td></tr>
+                <tr><td>Region</td><td>{{ phone_obj.get('region', 'N/A') }}</td></tr>
+                <tr><td>Number Type</td><td>{{ phone_obj.get('number_type', 'N/A') }}</td></tr>
+                <tr><td>Format Valid</td><td>{{ phone_obj.get('format_valid', 'N/A') }}</td></tr>
+                <tr><td>International Format</td><td>{{ phone_obj.get('international_format', 'N/A') }}</td></tr>
+                <tr><td>E.164</td><td>{{ phone_obj.get('e164', 'N/A') }}</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        {% endif %}
+
+        {% set email_obj = det.get('email') %}
+        {% if email_obj is mapping and email_obj.get('email') %}
+        <div class="subsection">
+          <div class="subsection-title"><span class="dot" style="background:var(--dark-red)"></span> Email Details</div>
+          <div class="detail-grid-wrapper">
+            <table class="detail-grid" role="table">
+              <thead><tr><th>Field</th><th>Value</th></tr></thead>
+              <tbody>
+                <tr><td>Email</td><td>{{ email_obj.get('email', 'N/A') }}</td></tr>
+                <tr><td>Domain</td><td>{{ email_obj.get('domain', 'N/A') }}</td></tr>
+                <tr><td>Format Valid</td><td>{{ email_obj.get('format_valid', 'N/A') }}</td></tr>
+                <tr><td>Is Disposable</td><td>{{ email_obj.get('is_disposable', 'N/A') }}</td></tr>
+                <tr><td>Is Reserved</td><td>{{ email_obj.get('is_reserved', 'N/A') }}</td></tr>
+                <tr><td>Is Corporate</td><td>{{ email_obj.get('is_corporate', 'N/A') }}</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        {% endif %}
+
+        {% set skip_keys = ['reason', 'checks_performed', 'warnings', 'issues', 'recruiter_recommendation', 'impact', 'missing_information', 'validation_error', 'email', 'phone'] %}
+        {% set detail_rows = [] %}
+        {% for dk, dv in det.items() %}
+          {% if dk not in skip_keys and dv is not mapping and dv is not iterable and dv is not none %}
+            {% set _ = detail_rows.append({'key': dk, 'value': dv}) %}
+          {% endif %}
+        {% endfor %}
+        {% if detail_rows | length > 0 %}
+        <div class="detail-grid-wrapper">
+          <table class="detail-grid" role="table">
+            <thead><tr><th>Field</th><th>Value</th></tr></thead>
+            <tbody>
+            {% for row in detail_rows %}
+            <tr><td>{{ row.key | replace('_', ' ') | title }}</td><td>{{ row.value }}</td></tr>
+            {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% endif %}
+      {% endif %}
+
+      {% if failure_reason and failure_reason|trim %}
+      <div class="recruiter-action-box failure">
+        <strong>Failure Reason</strong>
+        {{ failure_reason|trim }}
+      </div>
+      {% endif %}
+
+      {% if impact and impact|trim %}
+      <div class="recruiter-action-box impact">
+        <strong>Impact</strong>
+        {{ impact|trim }}
+      </div>
+      {% endif %}
+
+      {% if val_error and val_error|trim %}
+      <div class="validation-error-box">
+        <strong>Validation Error</strong>
+        {{ val_error|trim }}
+      </div>
+      {% endif %}
+
+      {% if status == 'FAILED' %}
+      <div class="recruiter-action-box failure">
+        <strong>Recruiter Action Required</strong>
+        {% if recruiter_action %}
+        {{ recruiter_action }}
+        {% else %}
+        Review evidence above. Consider requesting additional documentation from the candidate before proceeding.
+        {% endif %}
+      </div>
+      {% elif status == 'WARNING' %}
+      <div class="recruiter-action-box review">
+        <strong>Recruiter Note</strong>
+        {% if recruiter_action %}
+        {{ recruiter_action }}
+        {% else %}
+        Minor concerns identified. Note these items for follow-up during the interview process.
+        {% endif %}
+      </div>
+      {% elif status == 'SKIPPED' %}
+      <div class="recruiter-action-box review">
+        <strong>Recruiter Note</strong>
+        {% if recruiter_action %}
+        {{ recruiter_action }}
+        {% else %}
+        Insufficient data to perform this validation. Request missing information from the candidate if relevant.
+        {% endif %}
+      </div>
+      {% elif status == 'PASSED' %}
+      <div class="recruiter-action-box impact">
+        <strong>Result</strong>
+        {% if recruiter_action %}
+        {{ recruiter_action }}
+        {% else %}
+        All checks passed for this validation module. No action required.
+        {% endif %}
+      </div>
+      {% endif %}
+    </div>
+  </div>
+{% endfor %}
+
+{% set recruiter_notes = llm.get('recruiter_notes', []) %}
+{% if recruiter_notes %}
+<div class="recruiter-notes-section" role="region" aria-label="Recruiter notes">
+  <h2>Recruiter Notes</h2>
+  <div class="note-grid">
+  {% for note in recruiter_notes %}
+    <div class="note-card">
+      <span class="note-icon" aria-hidden="true">i</span>
+      <span>{{ note }}</span>
+    </div>
+  {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{% set interview_questions = llm.get('technical_interview_questions', []) %}
+{% if interview_questions %}
+<div class="section">
+  <div class="section-header" onclick="toggleSection(this)" onkeydown="if(event.key==='Enter'||event.key===' ') { event.preventDefault(); toggleSection(this); }" role="button" tabindex="0" aria-expanded="true" aria-controls="section-interview">
+    <span class="status-indicator PASSED">AI</span>
+    <h2>Technical Interview Questions</h2>
+    <span class="toggle-icon open" aria-hidden="true">&#9654;</span>
+  </div>
+  <div class="section-body" id="section-interview">
+    <div class="interview-table-wrapper">
+      <table class="interview-table">
+        <thead>
+          <tr>
+            <th>Technology</th>
+            <th>Difficulty</th>
+            <th>Question</th>
+            <th>Reason</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for q in interview_questions %}
+          <tr>
+            <td><span class="tech-badge">{{ q.get('category', '') }}</span></td>
+            <td><span class="diff-badge {{ q.get('difficulty', 'Medium')|lower }}">{{ q.get('difficulty', 'Medium') }}</span></td>
+            <td>{{ q.get('question', '') }}</td>
+            <td class="reason-cell">{{ q.get('reason', '') }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% set previous = results.get('previous_report_check', validation_result.get('previous_report_check', {})) %}
+{% if previous and previous.get('exists') %}
+<div class="section">
+  <div class="section-header" onclick="toggleSection(this)" onkeydown="if(event.key==='Enter'||event.key===' ') { event.preventDefault(); toggleSection(this); }" role="button" tabindex="0" aria-expanded="true" aria-controls="section-previous">
+    <span class="status-indicator PASSED">PREVIOUS</span>
+    <h2>Previous Report Comparison</h2>
+    <span class="toggle-icon open" aria-hidden="true">&#9654;</span>
+  </div>
+  <div class="section-body" id="section-previous">
+    <div class="previous-report">
+      <h4>Previous Validation Report Available</h4>
+      <p>Report URL: <a href="{{ previous.get('report_url', '#') }}" target="_blank" rel="noopener">{{ previous.get('report_url', 'N/A') }}</a></p>
+      {% if previous.get('differences') %}
+      <div style="margin-top:0.5rem;">
+        <strong>Differences from previous validation:</strong>
+        <ul style="margin-top:0.25rem;padding-left:1.25rem;">
+        {% for diff in previous.get('differences', []) %}
+          <li>{{ diff }}</li>
+        {% endfor %}
+        </ul>
+      </div>
+      {% endif %}
+      {% if previous.get('trend') %}
+      <p style="margin-top:0.5rem;"><strong>Trend:</strong> {{ previous.get('trend') }}</p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<footer>
+  <div class="footer-title">Candidate Validation Report</div>
+  <div>Generated by Candidate Validation Platform v2.0</div>
+  <div class="footer-row">
+    <span>Candidate ID: {{ candidate_id }}</span>
+    <span>Generated: {{ generated_at }}</span>
+    <span>Validation Version: 2.0.0</span>
+    <span>Report Version: 2.0</span>
+    {% set blob_id = '' %}
+    <span>Blob ID: report-{{ candidate_id }}-{{ generated_at[:8] if generated_at else '' }}.html</span>
+  </div>
+</footer>
+
+</div>
+
+<script>
+function toggleSection(header) {
+  var body = header.nextElementSibling;
+  var icon = header.querySelector('.toggle-icon');
+  var isOpen = header.getAttribute('aria-expanded') === 'true';
+  body.classList.toggle('collapsed');
+  if (icon) icon.classList.toggle('open');
+  header.setAttribute('aria-expanded', !isOpen);
+}
+
+var passed = {{ counts.passed }};
+var failed = {{ counts.failed }};
+var warning = {{ counts.warning }};
+var skipped = {{ counts.skipped }};
+
+var statusCtx = document.getElementById('statusChart');
+if (statusCtx) {
+  new Chart(statusCtx, {
+    type: 'doughnut',
+    data: {
+      labels: ['Passed', 'Failed', 'Warning', 'Skipped'],
+      datasets: [{ data: [passed, failed, warning, skipped], backgroundColor: ['#059669', '#dc2626', '#d97706', '#9ca3af'], borderWidth: 0 }]
+    },
+    options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { position: 'bottom', labels: { padding: 12, usePointStyle: true } } }, cutout: '65%' }
+  });
+}
+
+var passCtx = document.getElementById('passRateChart');
+if (passCtx) {
+  new Chart(passCtx, {
+    type: 'doughnut',
+    data: {
+      labels: ['Passed + Warning', 'Failed + Skipped'],
+      datasets: [{ data: [passed + warning, failed + skipped], backgroundColor: ['#059669', '#dc2626'], borderWidth: 0 }]
+    },
+    options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { position: 'bottom', labels: { padding: 12, usePointStyle: true } } }, cutout: '65%' }
+  });
+}
+</script>
+</body>
+</html>

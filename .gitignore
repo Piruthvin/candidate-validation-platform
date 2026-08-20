@@ -1,0 +1,66 @@
+# ─────────────────────────────────────────────────────────────
+# Candidate Validation Platform — root .gitignore
+# Applies repo-wide. Nested .gitignore files still apply too.
+# ─────────────────────────────────────────────────────────────
+
+# ── Secrets & local configuration (NEVER commit) ─────────────
+.env
+.env.*
+!.env.example
+env.txt
+local.settings.json
+*.local
+
+# ── Node.js ──────────────────────────────────────────────────
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.vite/
+
+# ── Build output ─────────────────────────────────────────────
+dist/
+build/
+out/
+*.tsbuildinfo
+
+# ── Python ───────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+.venv/
+venv/
+env/
+ENV/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage/
+htmlcov/
+*.report
+
+# ── Logs ─────────────────────────────────────────────────────
+logs/
+*.log
+
+# ── Generated test / runtime artifacts ───────────────────────
+isolated_test_results.json
+production_readiness_report.json
+
+# ── IDE / editor ─────────────────────────────────────────────
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# ── OS ───────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── Docker ───────────────────────────────────────────────────
+.docker/
