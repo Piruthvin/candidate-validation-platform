@@ -77,8 +77,8 @@ External services (credentials go in the relevant `.env`, never committed):
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/<your-org>/<your-repo>.git
-cd <your-repo>
+git clone https://github.com/Piruthvin/candidate-validation-platform.git
+cd candidate-validation-platform
 ```
 
 ### 2. Backend
