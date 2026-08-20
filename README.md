@@ -130,4 +130,33 @@ func start
 
 ## License
 
-MIT (see `backend/pyproject.toml`).
+# Proprietary License
+
+© 2026 Piruthvin. All rights reserved.
+
+## Ownership
+
+This project, including all source code, assets, documentation, and related materials, is the exclusive property of Piruthvin.
+
+## Restrictions
+
+* You are NOT allowed to  sell any part of this project.
+* You are NOT allowed to use this project for commercial or personal purposes without explicit written permission from the owner.
+* Unauthorized use, reproduction, or distribution is strictly prohibited.
+
+## Permission
+
+To request permission for usage :
+## 📞 Contact
+
+**Owner:** Piruthvin  
+**Phone:** [+91 8754481778](tel:+918754481778)  
+**Email:** [piruthvinarun@gmail.com](mailto:piruthvinarun@gmail.com)
+
+## Liability
+
+The author is not liable for any damages arising from the use or misuse of this project.
+
+---
+
+**By accessing this repository, you agree to these terms.**
