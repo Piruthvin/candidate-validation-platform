@@ -1,8 +1,8 @@
 import logging
-
+import re
 from fastapi import APIRouter, Depends, HTTPException
 
-from app.core.dependencies import get_ats_service, get_report_generator, get_sas_generator
+from app.core.dependencies import get_azure_blob_service, get_report_generator, get_sas_generator
 from app.core.exceptions import AzureStorageException
 from app.domain.models import (
     BlobReportRequest,
@@ -15,9 +15,8 @@ from app.domain.models import (
     ReportSearchResponse,
     ReportResult,
 )
-from app.infrastructure.retry import retry_async
+from app.infrastructure.azure_blob import AzureBlobService
 from app.infrastructure.sas_generator import SASGenerator
-from app.services.ats_service import AtsService
 from app.services.report_generator import ReportGenerator
 
 logger = logging.getLogger(__name__)
@@ -28,6 +27,7 @@ router = APIRouter(prefix="/api/v1/reports", tags=["Reports"])
 @router.post(
     "/generate",
     response_model=ReportGenerationResponse,
+    response_model_exclude_none=True,
     summary="Generate Recruiter Report",
     description="Generates an HTML report from validation data, uploads to Azure Blob, and returns a SAS URL.",
     operation_id="generate_report",
@@ -67,32 +67,26 @@ async def generate_report(
 @router.post(
     "/latest",
     response_model=LatestReportResponse,
+    response_model_exclude_none=True,
     summary="Get Latest Report by Candidate",
-    description="Returns the latest validation report URL for a candidate by looking up their ATS record.",
+    description="Returns the latest validation report URL for a candidate.",
     operation_id="get_report_by_candidate",
 )
 async def get_report_by_candidate(
     request: LatestReportRequest,
-    ats: AtsService = Depends(get_ats_service),
+    azure_blob: AzureBlobService = Depends(get_azure_blob_service),
     sas_generator: SASGenerator = Depends(get_sas_generator),
 ) -> LatestReportResponse:
-    candidate = await retry_async(
-        lambda: ats.fetch_candidate(request.candidate_id),
-        max_retries=2,
-        name="fetch_for_report",
-    )
-    if isinstance(candidate, dict) and "error" in candidate:
-        raise HTTPException(status_code=404, detail=f"Candidate {request.candidate_id} not found")
-    if not candidate.report_url and not candidate.blob_id:
+    blobs = await azure_blob.list_blobs(prefix=f"report-{request.candidate_id}-")
+    if not blobs:
         raise HTTPException(status_code=404, detail=f"No report found for candidate {request.candidate_id}")
-    report_url = candidate.report_url or ""
-    blob_id = candidate.blob_id or ""
-    if blob_id and not report_url:
-        report_url = sas_generator.generate_sas_url(blob_path=blob_id)
+
+    latest_blob = sorted(blobs, reverse=True)[0]
+    report_url = sas_generator.generate_sas_url(blob_path=latest_blob)
     return LatestReportResponse(
-        blob_id=blob_id,
+        blob_id=latest_blob,
         report_url=report_url,
-        created_time=candidate.validation_timestamp or "",
+        created_time="",
         candidate_id=request.candidate_id,
     )
 
@@ -100,6 +94,7 @@ async def get_report_by_candidate(
 @router.post(
     "/blob",
     response_model=BlobReportResponse,
+    response_model_exclude_none=True,
     summary="Fetch Report by Blob ID",
     description="Returns a report URL for a given Azure Blob ID.",
     operation_id="get_report_by_blob",
@@ -119,40 +114,29 @@ async def get_report_by_blob(
 @router.post(
     "/search",
     response_model=ReportSearchResponse,
+    response_model_exclude_none=True,
     summary="Search Reports",
-    description="Search validation reports by candidate_id, name, recommendation, or validation status.",
+    description="Search validation reports by candidate_id.",
     operation_id="search_reports",
 )
 async def search_reports(
     request: ReportSearchRequest,
-    ats: AtsService = Depends(get_ats_service),
+    azure_blob: AzureBlobService = Depends(get_azure_blob_service),
+    sas_generator: SASGenerator = Depends(get_sas_generator),
 ) -> ReportSearchResponse:
-    from app.domain.models import AtsSearchParams as AtsSearch
-
-    listed = await retry_async(
-        lambda: ats.list_candidates(AtsSearch(page=1, page_size=max(request.page_size, 200))),
-        max_retries=2,
-        name="search_reports_list",
-    )
-    if isinstance(listed, dict) and "error" in listed:
-        raise HTTPException(status_code=502, detail=listed["error"])
+    prefix = f"report-{request.candidate_id}-" if request.candidate_id else "report-"
+    blobs = await azure_blob.list_blobs(prefix=prefix)
 
     results: list[ReportResult] = []
-    for item in listed.data:
-        if request.candidate_id and request.candidate_id.lower() not in item.candidate_id.lower():
-            continue
-        if request.candidate_name and request.candidate_name.lower() not in f"{item.first_name or ''} {item.last_name or ''}".lower():
-            continue
-        if request.recommendation and (item.recommendation or "").lower() != request.recommendation.lower():
-            continue
-        if request.validation_status and (item.validation_status or "").lower() != request.validation_status.lower():
-            continue
-        if item.report_url or item.blob_id:
-            results.append(ReportResult(
-                blob_id=item.blob_id or "",
-                report_url=item.report_url or "",
-                candidate_id=item.candidate_id,
-            ))
+    for blob_id in sorted(blobs, reverse=True):
+        m = re.match(r"report-([^-]+)-(\d+)\.html", blob_id)
+        cid = m.group(1) if m else ""
+        report_url = sas_generator.generate_sas_url(blob_path=blob_id)
+        results.append(ReportResult(
+            blob_id=blob_id,
+            report_url=report_url,
+            candidate_id=cid,
+        ))
 
     start = (request.page - 1) * request.page_size
     end = start + request.page_size

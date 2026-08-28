@@ -129,11 +129,9 @@ def get_report_generator(
     azure_blob_service: AzureBlobService = Depends(get_azure_blob_service),
     sas_generator: SASGenerator = Depends(get_sas_generator),
     settings: Settings = Depends(get_settings),
-    ats_service: AtsService = Depends(get_ats_service),
 ) -> ReportGenerator:
     return ReportGenerator(
         azure_blob_service=azure_blob_service,
         sas_generator=sas_generator,
         settings=settings,
-        ats_service=ats_service,
     )

@@ -19,8 +19,9 @@ router = APIRouter(prefix="/api/v1/ats", tags=["ATS"])
 @router.post(
     "/candidates",
     response_model=CandidateListResponse,
+    response_model_exclude_none=True,
     summary="List ATS Candidates",
-    description="Returns paginated list of candidates from ATS with optional search and status filter.",
+    description="Returns paginated list of candidates from ATS with optional search.",
     operation_id="list_ats_candidates",
 )
 async def list_candidates(
@@ -32,12 +33,10 @@ async def list_candidates(
     params = AtsSearchParams(
         page=request.page,
         page_size=request.page_size,
-        search=request.search or "",
-        status=request.status or "",
+        search=request.search,
+        status=request.status,
         sort_by=request.sort_by,
         sort_order=request.sort_order,
-        recommendation=request.recommendation,
-        validation_status=request.validation_status,
     )
     result = await retry_async(
         lambda: ats.list_candidates(params),
@@ -52,6 +51,7 @@ async def list_candidates(
 @router.post(
     "/candidate",
     response_model=CandidateDetailResponse,
+    response_model_exclude_none=True,
     summary="Get Candidate Details",
     description="Returns full candidate details from ATS by candidate ID.",
     operation_id="get_ats_candidate",
@@ -73,6 +73,7 @@ async def get_candidate(
 @router.post(
     "/search",
     response_model=CandidateSearchResponse,
+    response_model_exclude_none=True,
     summary="Search Candidates",
     description="Search candidates by candidate_id, name, email, phone, or company. Returns matching ATS records.",
     operation_id="search_ats_candidates",
@@ -106,10 +107,6 @@ async def search_candidates(
         if request.phone and request.phone not in (item.phone or ""):
             continue
         if request.company and request.company.lower() not in (item.current_employer or "").lower():
-            continue
-        if request.recommendation and (item.recommendation or "").lower() != request.recommendation.lower():
-            continue
-        if request.validation_status and (item.validation_status or "").lower() != request.validation_status.lower():
             continue
         full = await ats.fetch_candidate(item.candidate_id)
         if not (isinstance(full, dict) and "error" in full):

@@ -63,6 +63,10 @@ class AtsService:
             logger.info("ATS token refreshed successfully (%.2fs)", elapsed)
             return self._access_token
 
+    def _sanitize_params(self, params: dict[str, Any]) -> dict[str, Any]:
+        """Strip None, empty string values and unsupported parameters before calling Zoho API."""
+        return {k: str(v) for k, v in params.items() if v is not None and str(v).strip() != ""}
+
     async def fetch_candidate(self, candidate_id: str, resume: Any = None) -> AtsCandidate:
         started = time.monotonic()
         logger.info("ATS fetch_candidate: candidate_id=%s", candidate_id)
@@ -113,7 +117,7 @@ class AtsService:
         headers = {"Authorization": f"Zoho-oauthtoken {token}"}
         criteria = f"({field}:equals:{value})"
         url = f"{self._api_base_url}/Candidates/search"
-        params = {"criteria": criteria}
+        params = self._sanitize_params({"criteria": criteria})
 
         logger.info("ATS search: GET %s criteria=%s", url, criteria)
         resp = await client.get(url, headers=headers, params=params)
@@ -208,69 +212,39 @@ class AtsService:
             total_experience_years=AtsService._parse_float(data.get("Experience_in_Years")),
             current_employer=data.get("Current_Employer"),
             location=data.get("Location") or f"{data.get('City', '') or ''} {data.get('State', '') or ''} {data.get('Country', '') or ''}".strip(),
-            report_url=data.get("Report_URL"),
-            blob_id=data.get("Blob_ID"),
-            validation_status=data.get("Validation_Status"),
-            recommendation=data.get("Recommendation"),
-            validation_timestamp=data.get("Validation_Timestamp"),
         )
-
-    async def update_candidate(self, candidate_id: str, fields: dict[str, Any]) -> bool:
-        started = time.monotonic()
-        record_id = await self._resolve_candidate_id(candidate_id)
-
-        client = await self._get_client()
-        token = await self._ensure_token(client)
-        headers = {"Authorization": f"Zoho-oauthtoken {token}", "Content-Type": "application/json"}
-        payload = {"data": [fields]}
-        url = f"{self._api_base_url}/Candidates/{record_id}"
-        logger.info("ATS PUT %s fields=%s", url, list(fields.keys()))
-        resp = await client.put(url, headers=headers, json=payload)
-        elapsed = time.monotonic() - started
-        if resp.status_code not in (200, 201):
-            logger.error("ATS PUT %s failed: HTTP %d - %s (%.2fs)", url, resp.status_code, resp.text[:200], elapsed)
-            raise AtsException(f"Failed to update candidate {candidate_id}: HTTP {resp.status_code}")
-        logger.info("ATS PUT %s -> HTTP %d success (%.2fs)", url, resp.status_code, elapsed)
-        return True
-
-    async def update_report_metadata(
-        self,
-        candidate_id: str,
-        report_url: str,
-        blob_id: str,
-        validation_status: str,
-        recommendation: str,
-    ) -> bool:
-        from datetime import datetime, timezone
-
-        fields = {
-            "Report_URL": report_url,
-            "Blob_ID": blob_id,
-            "Validation_Status": validation_status,
-            "Recommendation": recommendation,
-            "Validation_Timestamp": datetime.now(timezone.utc).isoformat(),
-        }
-        return await self.update_candidate(candidate_id, fields)
 
     async def list_candidates(self, params: AtsSearchParams = AtsSearchParams()) -> AtsCandidateList:
         started = time.monotonic()
         client = await self._get_client()
         token = await self._ensure_token(client)
         headers = {"Authorization": f"Zoho-oauthtoken {token}"}
-        request_params = {
-            "page": params.page,
-            "per_page": params.page_size,
-            "sort_by": params.sort_by,
-            "sort_order": params.sort_order,
-        }
+
         if params.search:
-            request_params["criteria"] = f"(First_Name:starts_with:{params.search})"
-        url = f"{self._api_base_url}/Candidates"
+            url = f"{self._api_base_url}/Candidates/search"
+            request_params = self._sanitize_params({
+                "page": params.page,
+                "per_page": params.page_size,
+                "criteria": f"(First_Name:starts_with:{params.search})",
+            })
+        else:
+            url = f"{self._api_base_url}/Candidates"
+            request_params = self._sanitize_params({
+                "page": params.page,
+                "per_page": params.page_size,
+            })
+
         logger.info("ATS list: GET %s params=%s", url, request_params)
         resp = await client.get(url, headers=headers, params=request_params)
         elapsed = time.monotonic() - started
+
+        if resp.status_code == 204:
+            logger.info("ATS list returned 204 (no content)")
+            return AtsCandidateList(total=0, data=[])
+
         if resp.status_code != 200:
             raise AtsException(f"Zoho list API error: HTTP {resp.status_code} - {resp.text[:300]}")
+
         data = resp.json()
         items = [
             AtsCandidateListItem(
@@ -282,9 +256,6 @@ class AtsService:
                 current_employer=record.get("Current_Employer"),
                 location=record.get("Location") or f"{record.get('City', '') or ''} {record.get('State', '') or ''} {record.get('Country', '') or ''}".strip(),
                 created_time=record.get("Created_Time"),
-                validation_status=record.get("Validation_Status"),
-                recommendation=record.get("Recommendation"),
-                report_url=record.get("Report_URL"),
             )
             for record in data.get("data", [])
         ]

@@ -32,18 +32,21 @@ class ContactValidator:
         self.email_verifier = EmailDomainVerifier()
 
     async def validate(self, resume: ResumeData) -> ValidationEvidence:
+        logger.info("ContactValidator input: email=%s, phone=%s", resume.email, resume.phone)
         evidence = []
         details = {"email": {}, "phone": {}}
+
+        dns_result: EmailDomainVerification | None = None
 
         if resume.email:
             details["email"]["email"] = resume.email
             evidence.append(f"Email: {resume.email}")
             pattern = re.compile(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$")
             if not pattern.match(resume.email):
-                evidence.append(f"  Format: INVALID")
+                evidence.append("  Format: INVALID")
                 details["email"]["format_valid"] = False
             else:
-                evidence.append(f"  Format: VALID")
+                evidence.append("  Format: VALID")
                 details["email"]["format_valid"] = True
 
             domain = resume.email.split("@")[-1] if "@" in resume.email else ""
@@ -52,13 +55,13 @@ class ContactValidator:
 
             details["email"]["is_disposable"] = domain.lower() in DISPOSABLE_DOMAINS
             if details["email"]["is_disposable"]:
-                evidence.append(f"  Provider: DISPOSABLE")
+                evidence.append("  Provider: DISPOSABLE")
             else:
                 evidence.append(f"  Provider: {'CORPORATE' if domain.lower() not in COMMON_PROVIDERS else 'PUBLIC'}")
 
             details["email"]["is_reserved"] = domain.lower() in RESERVED_EXAMPLE_DOMAINS
             if details["email"]["is_reserved"]:
-                evidence.append(f"  Domain type: RESERVED/EXAMPLE")
+                evidence.append("  Domain type: RESERVED/EXAMPLE")
 
             if domain.lower() in DISPOSABLE_DOMAINS:
                 dns_result = EmailDomainVerification(domain=domain, is_disposable=True)
@@ -67,13 +70,13 @@ class ContactValidator:
             details["email"]["dns"] = dns_result.model_dump() if dns_result else None
             if dns_result and dns_result.domain:
                 if dns_result.has_dns:
-                    evidence.append(f"  DNS: FOUND")
+                    evidence.append("  DNS: FOUND")
                 else:
-                    evidence.append(f"  DNS: NOT FOUND")
+                    evidence.append("  DNS: NOT FOUND")
                 if dns_result.has_mx:
-                    evidence.append(f"  MX: FOUND")
+                    evidence.append("  MX: FOUND")
                 else:
-                    evidence.append(f"  MX: NOT FOUND")
+                    evidence.append("  MX: NOT FOUND")
             evidence.append("")
         else:
             evidence.append("Email: MISSING")
@@ -120,12 +123,12 @@ class ContactValidator:
                     evidence.append(f"  Region: {region}")
                     evidence.append(f"  International: {intl_format}")
                     evidence.append(f"  E164: {e164_format}")
-                    evidence.append(f"  Valid: YES")
+                    evidence.append("  Valid: YES")
                 else:
-                    evidence.append(f"  Valid: NO — failed libphonenumber validation")
+                    evidence.append("  Valid: NO — failed libphonenumber validation")
                     details["phone"]["validation_error"] = "Number failed libphonenumber validation"
             except phonenumbers.NumberParseException as e:
-                evidence.append(f"  Valid: NO — could not be parsed")
+                evidence.append("  Valid: NO — could not be parsed")
                 details["phone"]["validation_error"] = str(e)
             evidence.append("")
         else:
@@ -138,23 +141,31 @@ class ContactValidator:
             evidence.extend(duplicates)
             details["duplicate_contacts"] = duplicates
 
-        status = ValidationStatus.PASSED
-        if evidence:
-            serious = [e for e in evidence if any(k in e.lower() for k in ("missing", "disposable", "reserved", "invalid format", "could not be parsed"))]
-            if any("reserved example" in e.lower() for e in evidence):
-                status = ValidationStatus.FAILED
-            elif any("disposable" in e.lower() for e in evidence):
-                status = ValidationStatus.FAILED
-            elif any("could not be parsed" in e.lower() or "invalid (failed validation)" in e.lower() for e in evidence):
-                status = ValidationStatus.FAILED
-            elif len(serious) >= 2:
-                status = ValidationStatus.FAILED
-            else:
-                status = ValidationStatus.WARNING
+        # Correct classification:
+        # IF invalid / critical error -> FAILED
+        # IF partially valid / non-critical warning -> WARNING
+        # IF fully valid -> PASSED
+        has_critical_error = (
+            details["email"].get("missing")
+            or details["phone"].get("missing")
+            or details["email"].get("format_valid") is False
+            or details["phone"].get("format_valid") is False
+            or details["email"].get("is_disposable")
+            or details["email"].get("is_reserved")
+        )
+        has_warning = bool(duplicates) or (dns_result and not dns_result.has_dns and not details["email"].get("is_disposable"))
+
+        if has_critical_error:
+            status = ValidationStatus.FAILED
+        elif has_warning:
+            status = ValidationStatus.WARNING
+        else:
+            status = ValidationStatus.PASSED
 
         if status == ValidationStatus.PASSED:
             evidence.append("Contact validation passed. Email format valid, phone number valid, and all checks consistent.")
 
+        logger.info("ContactValidator decision: status=%s", status)
         return ValidationEvidence(status=status, evidence=evidence, details=details)
 
     def _detect_duplicate_contacts(self, resume: ResumeData) -> list[str]:

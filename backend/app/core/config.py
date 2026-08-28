@@ -33,10 +33,7 @@ class Settings(BaseSettings):
 
     company_request_timeout: int = Field(default=10, alias="COMPANY_REQUEST_TIMEOUT")
 
-    apify_token: str | None = Field(default=None, alias="APIFY_TOKEN")
-    apify_actor_id: str = Field(default="inexhaustible_glass/linkedin-scraper", alias="APIFY_ACTOR_ID")
-    apify_timeout: int = Field(default=60, alias="APIFY_TIMEOUT")
-    linkedin_scraping_enabled: bool = Field(default=False, alias="LINKEDIN_SCRAPING_ENABLED")
+    linkedin_timeout: int = Field(default=5, alias="LINKEDIN_TIMEOUT")
 
     cors_origins: list[str] = Field(default=["*"], alias="CORS_ORIGINS")
 

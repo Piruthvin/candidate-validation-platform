@@ -8,9 +8,7 @@ from app.core.config import Settings
 from app.core.exceptions import AzureStorageException
 from app.domain.models import CandidateInfo, ReportResult
 from app.infrastructure.azure_blob import AzureBlobService
-from app.infrastructure.retry import retry_async
 from app.infrastructure.sas_generator import SASGenerator
-from app.services.ats_service import AtsService
 
 logger = logging.getLogger(__name__)
 
@@ -23,12 +21,10 @@ class ReportGenerator:
         azure_blob_service: AzureBlobService,
         sas_generator: SASGenerator,
         settings: Settings,
-        ats_service: AtsService | None = None,
     ):
         self.azure_blob_service = azure_blob_service
         self.sas_generator = sas_generator
         self.settings = settings
-        self.ats_service = ats_service
         self.env = Environment(loader=FileSystemLoader(str(TEMPLATE_DIR)))
 
     async def generate(
@@ -80,21 +76,6 @@ class ReportGenerator:
         logger.info("Generating SAS URL for blob: %s", blob_id)
         sas_url = self.sas_generator.generate_sas_url(blob_path=blob_id)
         logger.info("SAS URL generated successfully")
-
-        if self.ats_service:
-            validation_status = self._extract_status(validation_result)
-            recommendation = llm_analysis_dict.get("recommendation", "REVIEW") or "REVIEW"
-            await retry_async(
-                lambda: self.ats_service.update_report_metadata(
-                    candidate_id=candidate_id,
-                    report_url=sas_url,
-                    blob_id=blob_id,
-                    validation_status=validation_status,
-                    recommendation=recommendation,
-                ),
-                max_retries=2,
-                name="ats_report_update",
-            )
 
         logger.info("Returning success for candidate %s, blob %s", candidate_id, blob_id)
         return ReportResult(
@@ -159,15 +140,3 @@ class ReportGenerator:
                      val_summary.get("warning", "N/A"),
                      val_summary.get("skipped", "N/A"))
         logger.info("=== End Report Generator Mappings ===")
-
-    def _extract_status(self, data: dict) -> str:
-        results = data.get("results", data.get("validation", data))
-        failed_count = 0
-        for key, val in results.items():
-            if isinstance(val, dict) and val.get("status") == "FAILED":
-                failed_count += 1
-        if failed_count == 0:
-            return "PASSED"
-        if failed_count <= 2:
-            return "WARNING"
-        return "FAILED"

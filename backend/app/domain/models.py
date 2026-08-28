@@ -51,6 +51,8 @@ class ResumeData(BaseModel):
     phone: str | None = Field(default=None, max_length=50)
     summary: str | None = Field(default=None, max_length=5000)
     location: str | None = Field(default=None, max_length=500)
+    company: str | None = Field(default=None, max_length=500)
+    current_employer: str | None = Field(default=None, max_length=500)
     linkedin_url: str | None = Field(default=None, max_length=500)
     skills: list[str] = Field(default_factory=list, max_length=500)
     experience: list[ResumeExperience] = Field(default_factory=list, max_length=100)
@@ -73,11 +75,6 @@ class AtsCandidate(BaseModel):
     total_experience_years: float | None = None
     current_employer: str | None = None
     location: str | None = None
-    report_url: str | None = None
-    blob_id: str | None = None
-    validation_status: str | None = None
-    recommendation: str | None = None
-    validation_timestamp: str | None = None
 
 
 class PossibleMatch(BaseModel):
@@ -109,18 +106,8 @@ class LinkedInData(BaseModel):
     profile_url: str | None = None
     username: str | None = None
     profile_exists: bool = False
-    profile_name: str | None = None
-    profile_headline: str | None = None
-    experience: list[dict] = Field(default_factory=list)
-    education: list[dict] = Field(default_factory=list)
-    skills: list[str] = Field(default_factory=list)
-    name_match: bool | None = None
-    employer_match: bool | None = None
-    location: str | None = None
-    location_match: bool | None = None
-    experience_match_count: int | None = None
-    education_match_count: int | None = None
-    skills_overlap_count: int | None = None
+    valid: bool = False
+    status_code: int = 0
 
 
 COUNTRY_CODES = {
@@ -288,10 +275,8 @@ class AtsSearchParams(BaseModel):
     page_size: int = Field(default=20, ge=1, le=100)
     search: str | None = None
     status: str | None = None
-    sort_by: str = "created_time"
-    sort_order: str = "desc"
-    recommendation: str | None = None
-    validation_status: str | None = None
+    sort_by: str | None = None
+    sort_order: str | None = None
 
 
 class AtsCandidateListItem(BaseModel):
@@ -303,9 +288,6 @@ class AtsCandidateListItem(BaseModel):
     current_employer: str | None = None
     location: str | None = None
     created_time: str | None = None
-    validation_status: str | None = None
-    recommendation: str | None = None
-    report_url: str | None = None
 
 
 class AtsCandidateList(BaseModel):
@@ -318,10 +300,8 @@ class CandidateListRequest(BaseModel):
     page_size: int = Field(default=20, ge=1, le=100)
     search: str | None = None
     status: str | None = None
-    sort_by: str = "created_time"
-    sort_order: str = "desc"
-    recommendation: str | None = None
-    validation_status: str | None = None
+    sort_by: str | None = None
+    sort_order: str | None = None
 
 
 class CandidateListResponse(BaseModel):
@@ -343,8 +323,6 @@ class CandidateSearchRequest(BaseModel):
     email: str | None = None
     phone: str | None = None
     company: str | None = None
-    recommendation: str | None = None
-    validation_status: str | None = None
     page: int = Field(default=1, ge=1)
     page_size: int = Field(default=20, ge=1, le=100)
 

@@ -10,8 +10,9 @@ router = APIRouter(prefix="/api/v1/validation", tags=["Validation"])
 @router.post(
     "/validate",
     response_model=ValidationResult,
+    response_model_exclude_none=True,
     summary="Validate Candidate Profile",
-    description="Runs all 11 validators plus enrichment (ATS, LinkedIn, Company) on a candidate resume.",
+    description="Runs all validators plus enrichment (ATS, LinkedIn, Company) on a candidate resume.",
     operation_id="validate_candidate",
 )
 async def validate_candidate(

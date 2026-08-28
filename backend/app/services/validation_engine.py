@@ -9,8 +9,8 @@ from app.domain.models import (
     PreviousValidationReport,
     ResumeData,
     ValidationEvidence,
-    ValidationResult,
     ValidationStatus,
+    ValidationResult,
 )
 from app.infrastructure.azure_blob import AzureBlobService
 from app.infrastructure.email_verifier import EmailDomainVerifier
@@ -50,6 +50,8 @@ class ValidationEngine:
         skills_validator: SkillsValidator | None = None,
         project_validator: ProjectValidator | None = None,
         certification_validator: CertificationValidator | None = None,
+        company_validator: CompanyValidator | None = None,
+        linkedin_validator: LinkedInValidator | None = None,
         employment_pattern_validator: EmploymentPatternValidator | None = None,
         resume_completeness_validator: ResumeCompletenessValidator | None = None,
         cross_field_validator: CrossFieldValidator | None = None,
@@ -67,16 +69,36 @@ class ValidationEngine:
         self.skills_validator = skills_validator or SkillsValidator()
         self.project_validator = project_validator or ProjectValidator()
         self.certification_validator = certification_validator or CertificationValidator()
+        self.company_validator = company_validator or CompanyValidator()
+        self.linkedin_validator = linkedin_validator or LinkedInValidator()
         self.employment_pattern_validator = employment_pattern_validator or EmploymentPatternValidator()
         self.resume_completeness_validator = resume_completeness_validator or ResumeCompletenessValidator()
         self.cross_field_validator = cross_field_validator or CrossFieldValidator()
 
     async def validate(self, candidate_id: str, resume_data: dict) -> ValidationResult:
+        logger.info("=== Starting Validation for candidate_id=%s ===", candidate_id)
         resume = ResumeData(**resume_data)
         resume.candidate_id = candidate_id
 
         if "raw_text" not in resume_data and resume_data.get("raw_resume_text"):
             resume.raw_text = resume_data.get("raw_resume_text")
+
+        # Extract and normalize company name from all possible fields
+        company_name = (
+            getattr(resume, "company", None)
+            or getattr(resume, "current_employer", None)
+            or (resume.experience[0].company if resume.experience and resume.experience[0].company else None)
+            or (resume_data.get("company") if isinstance(resume_data, dict) else None)
+            or (resume_data.get("current_employer") if isinstance(resume_data, dict) else None)
+        )
+        if company_name and isinstance(company_name, str):
+            company_name = company_name.strip()
+            resume.company = company_name
+
+        logger.info(
+            "Extracted candidate inputs: name='%s', email='%s', phone='%s', company='%s', linkedin_url='%s'",
+            resume.name, resume.email, resume.phone, company_name, resume.linkedin_url,
+        )
 
         completed = []
         skipped = []
@@ -86,8 +108,13 @@ class ValidationEngine:
         enrichments = {}
         previous_report = PreviousValidationReport()
 
-        ats_error: str | None = None
+        # Step 1: Resume completeness check
+        logger.info("Running Step 1: Resume Completeness Check")
+        resume_completeness_evidence = await self.resume_completeness_validator.validate(resume)
 
+        # Step 2: Fetch ATS data
+        logger.info("Running Step 2: Fetch ATS Data")
+        ats_error: str | None = None
         if self.ats_service:
             ats_result = await retry_async(
                 lambda: self.ats_service.fetch_candidate(candidate_id, resume),
@@ -95,65 +122,47 @@ class ValidationEngine:
             )
             if isinstance(ats_result, dict) and "error" in ats_result:
                 ats_error = ats_result["error"]
+                logger.warning("ATS fetch error: %s", ats_error)
             else:
                 enrichments["ats_candidate"] = ats_result
                 completed.append("ats_search")
+                logger.info("ATS data fetched successfully: name=%s %s", ats_result.first_name, ats_result.last_name)
 
         ats_candidate = enrichments.get("ats_candidate")
 
-        if ats_candidate:
-            if ats_candidate.report_url or ats_candidate.blob_id:
-                previous_report.exists = True
-                previous_report.report_url = ats_candidate.report_url
-                previous_report.blob_id = ats_candidate.blob_id
-                if self.azure_blob_service and ats_candidate.blob_id:
-                    try:
-                        prev_html = await self.azure_blob_service.download_blob(ats_candidate.blob_id)
-                        if prev_html:
-                            import re as regex
-                            data_match = regex.search(r"var validationData\s*=\s*(\{.+?\});", prev_html.decode("utf-8", errors="ignore"), regex.DOTALL)
-                            if data_match:
-                                import json
-                                previous_report.previous_validation = json.loads(data_match.group(1))
-                                completed.append("previous_report_downloaded")
-                    except Exception as e:
-                        logger.warning("Could not download previous report: %s", e)
-
+        # Step 3: Run new LinkedIn check (simple HTTP GET existence check)
+        logger.info("Running Step 3: LinkedIn Check (url=%s)", resume.linkedin_url)
         linkedin_error: str | None = None
-
         if self.linkedin_service:
-            li_result = await retry_async(
-                lambda: self.linkedin_service.enrich(resume.linkedin_url or "", resume),
-                max_retries=2, name="linkedin_fetch",
-            )
-            if isinstance(li_result, dict) and "error" in li_result:
-                linkedin_error = li_result["error"]
-            elif hasattr(li_result, "profile_url") and resume.linkedin_url:
-                if li_result.profile_exists:
-                    enrichments["linkedin"] = li_result
-                    completed.append("linkedin_fetch")
-                else:
-                    linkedin_error = "LinkedIn profile could not be fetched or scraped"
+            li_result = await self.linkedin_service.verify_profile(resume.linkedin_url)
+            enrichments["linkedin"] = li_result
+            if li_result.profile_exists:
+                completed.append("linkedin_fetch")
+            elif resume.linkedin_url:
+                linkedin_error = f"LinkedIn profile returned HTTP {li_result.status_code}"
+                completed.append("linkedin_fetch")
             else:
-                enrichments["linkedin"] = li_result
                 completed.append("linkedin_fetch")
 
+        # Step 4: Company verification
+        logger.info("Running Step 4: Company Verification (company='%s')", company_name)
         company_error: str | None = None
-
-        if self.company_verifier:
-            company_name = resume.name
-            if resume.experience and resume.experience[0].company:
-                company_name = resume.experience[0].company
+        if self.company_verifier and company_name:
             co_result = await retry_async(
                 lambda: self.company_verifier.verify(company_name),
                 max_retries=2, name="company_verification",
             )
             if isinstance(co_result, dict) and "error" in co_result:
                 company_error = co_result["error"]
+                logger.warning("Company verification error: %s", company_error)
             else:
                 enrichments["company"] = co_result
                 completed.append("company_verification")
+        elif company_name:
+            enrichments["company"] = CompanyData(company_name=company_name, is_verified=True)
+            completed.append("company_verification")
 
+        # Fraud detector
         if self.fraud_detector:
             try:
                 enrichments["fraud_signals"] = await asyncio.to_thread(self.fraud_detector.analyze, resume)
@@ -171,8 +180,9 @@ class ValidationEngine:
         if email_domain_evidence:
             enrichments["email_domain_verification"] = email_domain_evidence
 
+        # Step 5: Run remaining validators (existing unchanged rules)
         validators = {
-            "resume_completeness": self.resume_completeness_validator.validate(resume),
+            "resume_completeness": resume_completeness_evidence,
             "contact_validation": self.contact_validator.validate(resume),
             "education_validation": self.education_validator.validate(resume),
             "experience_validation": self.experience_validator.validate(resume),
@@ -181,18 +191,18 @@ class ValidationEngine:
             "project_validation": self.project_validator.validate(resume),
             "certification_validation": self.certification_validator.validate(resume),
             "employment_pattern": self.employment_pattern_validator.validate(resume),
-            "cross_field_validation": self.cross_field_validator.validate(resume, ats_candidate, company, linkedin, ats_error, linkedin_error, company_error),
+            "cross_field_validation": self.cross_field_validator.validate(
+                resume, ats_candidate, company, linkedin, ats_error, linkedin_error, company_error
+            ),
         }
 
-        if self.linkedin_service and linkedin:
-            validators["linkedin_verification"] = LinkedInValidator().validate(resume, linkedin)
+        if linkedin:
+            validators["linkedin_verification"] = self.linkedin_validator.validate(resume, linkedin)
 
-        if self.company_verifier and company:
-            validators["company_verification"] = CompanyValidator().validate(resume, company)
-
-        completed = list(dict.fromkeys(completed))
-        failed = list(dict.fromkeys(failed))
-        skipped = list(dict.fromkeys(skipped))
+        if company or company_name:
+            validators["company_verification"] = self.company_validator.validate(
+                resume, company or CompanyData(company_name=company_name, is_verified=True)
+            )
 
         result_kwargs = {
             "candidate_id": candidate_id,
@@ -219,20 +229,61 @@ class ValidationEngine:
         if email_domain_evidence:
             result_kwargs["email_domain_verification"] = email_domain_evidence
 
-        gathered = await asyncio.gather(*validators.values(), return_exceptions=True)
-        for (name, _), evidence in zip(validators.items(), gathered):
+        # Resolve async validators
+        async_keys = [k for k, v in validators.items() if asyncio.iscoroutine(v)]
+        async_coros = [validators[k] for k in async_keys]
+        results_resolved = await asyncio.gather(*async_coros, return_exceptions=True)
+
+        resolved_dict = {}
+        for k, v in validators.items():
+            if asyncio.iscoroutine(v):
+                idx = async_keys.index(k)
+                resolved_dict[k] = results_resolved[idx]
+            else:
+                resolved_dict[k] = v
+
+        for name, evidence in resolved_dict.items():
             if isinstance(evidence, Exception):
-                logger.error("Validator %s failed: %s", name, evidence)
+                logger.error("Validator %s failed with exception: %s", name, evidence)
                 failed.append(name)
                 errors.append(f"{name} error: {evidence}")
+                result_kwargs[name] = ValidationEvidence(
+                    status=ValidationStatus.FAILED,
+                    evidence=[f"Validation error in {name}: {evidence}"],
+                    details={"error": str(evidence)},
+                )
                 continue
+
+            # Safe deduplication of evidence messages
+            if evidence.evidence:
+                evidence.evidence = list(dict.fromkeys(evidence.evidence))
+
             result_kwargs[name] = evidence
+            logger.info("Validator '%s' finished -> status=%s", name, evidence.status.value)
+
             if evidence.status.value == "SKIPPED":
                 skipped.append(name)
+            elif evidence.status.value == "FAILED":
+                failed.append(name)
+                completed.append(name)
             else:
                 completed.append(name)
-            if evidence.evidence:
+
+            if evidence.evidence and evidence.status.value == "WARNING":
                 warnings.extend(evidence.evidence)
+
+        # Safe deduplication of lists
+        result_kwargs["completed_steps"] = list(dict.fromkeys(completed))
+        result_kwargs["failed_steps"] = list(dict.fromkeys(failed))
+        result_kwargs["skipped_steps"] = list(dict.fromkeys(skipped))
+        result_kwargs["warnings"] = list(dict.fromkeys(warnings))
+        result_kwargs["errors"] = list(dict.fromkeys(errors))
+
+        logger.info(
+            "=== Validation Complete for %s: completed=%d, failed=%d, warnings=%d, errors=%d ===",
+            candidate_id, len(result_kwargs["completed_steps"]), len(result_kwargs["failed_steps"]),
+            len(result_kwargs["warnings"]), len(result_kwargs["errors"]),
+        )
 
         return ValidationResult(**result_kwargs)
 
@@ -270,7 +321,7 @@ class ValidationEngine:
                 status = ValidationStatus.WARNING
             return ValidationEvidence(
                 status=status,
-                evidence=evidence,
+                evidence=list(dict.fromkeys(evidence)),
                 details={"domain": domain, "checks_performed": checks, "verification": result.model_dump() if result else None},
             )
         except Exception as e:
@@ -291,7 +342,7 @@ class ValidationEngine:
                 status = ValidationStatus.WARNING
         checks_performed = ["Keyword stuffing analysis", "AI generation markers", "Template detection", "Repeated phrase detection", "Placeholder pattern check"]
         warnings = []
-        issues = list(evidence)
+        issues = list(dict.fromkeys(evidence))
         failure_reason = ""
         if status == ValidationStatus.FAILED:
             failure_reason = f"Fraud detection failed with {len(signal_list)} signal(s): {', '.join(signal_list)}"
@@ -317,4 +368,4 @@ class ValidationEngine:
             "missing_information": missing_information,
         }
         enriched_details.update(signals)
-        return ValidationEvidence(status=status, evidence=evidence, details=enriched_details)
+        return ValidationEvidence(status=status, evidence=list(dict.fromkeys(evidence)), details=enriched_details)

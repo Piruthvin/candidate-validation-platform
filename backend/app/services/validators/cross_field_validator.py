@@ -1,6 +1,6 @@
 import logging
 import re
-from datetime import datetime
+from typing import Any
 
 from app.domain.models import AtsCandidate, CompanyData, LinkedInData, ResumeData, ValidationEvidence, ValidationStatus
 
@@ -31,18 +31,6 @@ class CrossFieldValidator:
         resume_vs_ats = self._build_ats_section(resume, candidate, ats_error)
         all_sections.append(resume_vs_ats)
 
-        resume_vs_linkedin = self._build_linkedin_section(resume, linkedin, linkedin_error)
-        all_sections.append(resume_vs_linkedin)
-
-        resume_vs_company = self._build_company_section(resume, company, company_error)
-        all_sections.append(resume_vs_company)
-
-        timeline_section = self._build_timeline_section(resume)
-        all_sections.append(timeline_section)
-
-        resume_vs_contact = self._build_contact_section(resume)
-        all_sections.append(resume_vs_contact)
-
         evidence.append("Evidence")
 
         has_not_evaluated = False
@@ -56,15 +44,15 @@ class CrossFieldValidator:
 
             if section["status"] == "NOT_EVALUATED":
                 has_not_evaluated = True
-                evidence.append(f"  Status")
-                evidence.append(f"  NOT EVALUATED")
-                evidence.append(f"  Reason")
+                evidence.append("  Status")
+                evidence.append("  NOT EVALUATED")
+                evidence.append("  Reason")
                 evidence.append(f"  {section['reason']}")
             elif section["status"] == "PASS":
-                evidence.append(f"  PASS")
+                evidence.append("  PASS")
             elif section["status"] == "MISMATCH":
                 has_mismatch = True
-                evidence.append(f"  MISMATCH")
+                evidence.append("  MISMATCH")
 
             for line in section.get("lines", []):
                 evidence.append(f"  {line}")
@@ -81,12 +69,11 @@ class CrossFieldValidator:
             status = ValidationStatus.FAILED
             evidence.append("  FAIL")
             reasons = [s.get("reason", "Contradiction detected") for s in all_sections if s["status"] == "MISMATCH"]
-            evidence.append(f"  Reason")
+            evidence.append("  Reason")
             evidence.append(f"  {'; '.join(reasons)}")
         elif has_not_evaluated:
             status = ValidationStatus.WARNING
             evidence.append("  WARNING")
-            not_evaled = [s["header"] for s in all_sections if s["status"] == "NOT_EVALUATED"]
             reasons = [s["reason"] for s in all_sections if s["status"] == "NOT_EVALUATED"]
             evidence.append("  Reason")
             evidence.append(f"  Cross-field validation is incomplete because {' and '.join(reasons)}.")
@@ -108,10 +95,6 @@ class CrossFieldValidator:
         missing_information = []
         if candidate is None:
             missing_information.append(ats_error or "ATS candidate data not available for cross-checking")
-        if linkedin is None:
-            missing_information.append(linkedin_error or "LinkedIn data not available for cross-checking")
-        if company is None:
-            missing_information.append(company_error or "Company data not available for cross-checking")
 
         confidence = 100.0
         if mismatch_count > 0:
@@ -122,10 +105,6 @@ class CrossFieldValidator:
 
         checks_performed = [
             "Resume vs ATS",
-            "Resume vs LinkedIn",
-            "Resume vs Company",
-            "Resume vs Timeline",
-            "Resume vs Contact",
         ]
 
         return ValidationEvidence(
@@ -199,118 +178,6 @@ class CrossFieldValidator:
 
         return section
 
-    def _build_linkedin_section(
-        self, resume: ResumeData, linkedin: LinkedInData | None, linkedin_error: str | None
-    ) -> dict:
-        section: dict = {"header": "Resume vs LinkedIn", "status": "", "lines": [], "comparisons": [], "reason": ""}
-
-        if linkedin is None:
-            section["status"] = "NOT_EVALUATED"
-            section["reason"] = linkedin_error or "LinkedIn profile unavailable"
-            return section
-
-        comps = self._check_linkedin_employer(resume, linkedin)
-        section["comparisons"].extend(comps)
-
-        for comp in comps:
-            result = comp.get("result", "")
-            source_value = comp.get("source_value", "")
-            target_value = comp.get("target_value", "")
-            compare_to = comp.get("compare_to", "")
-
-            if result == "MATCH":
-                section["lines"].append(f"Resume Employer '{source_value}' matches {compare_to}.")
-                section["status"] = "PASS"
-            elif result == "MISMATCH":
-                section["status"] = "MISMATCH"
-                section["reason"] = f"Resume Employer differs from LinkedIn: '{source_value}' vs '{target_value}'"
-                section["lines"].append(f"Resume Employer differs from LinkedIn: '{source_value}' vs '{target_value}'")
-
-        if not section["status"]:
-            section["status"] = "PASS"
-
-        return section
-
-    def _build_company_section(
-        self, resume: ResumeData, company: CompanyData | None, company_error: str | None
-    ) -> dict:
-        section: dict = {"header": "Resume vs Company", "status": "", "lines": [], "comparisons": [], "reason": ""}
-
-        if company is None:
-            section["status"] = "NOT_EVALUATED"
-            section["reason"] = company_error or "Company data unavailable"
-            return section
-
-        comps = self._check_company_employer(resume, company)
-        section["comparisons"].extend(comps)
-
-        for comp in comps:
-            result = comp.get("result", "")
-            source_value = comp.get("source_value", "")
-            target_value = comp.get("target_value", "")
-
-            if result == "MATCH":
-                section["status"] = "PASS"
-                if company.website:
-                    section["lines"].append(f"Employer '{source_value}'")
-                    section["lines"].append(f"Verified Website '{company.website}'")
-            elif result == "MISMATCH":
-                section["status"] = "MISMATCH"
-                section["reason"] = f"Resume Employer '{source_value}' does not match verified company '{target_value}'"
-                section["lines"].append(f"Employer '{source_value}'")
-                section["lines"].append(f"Verified '{target_value}'")
-
-        if not section["status"]:
-            section["status"] = "PASS"
-
-        return section
-
-    def _build_timeline_section(self, resume: ResumeData) -> dict:
-        section: dict = {"header": "Resume vs Timeline", "status": "", "lines": [], "comparisons": [], "reason": ""}
-
-        comps = self._check_graduation_vs_employment(resume)
-        section["comparisons"].extend(comps)
-
-        has_issue = False
-        for comp in comps:
-            if comp.get("valid", True):
-                section["lines"].append(f"Graduation: {comp['grad_year']}")
-                section["lines"].append(f"Employment: {comp['start_year']}")
-                section["lines"].append(f"Timeline PASS")
-            else:
-                has_issue = True
-                section["lines"].append(f"Employment start ({comp['start_year']}) precedes graduation ({comp['grad_year']})")
-
-        if has_issue:
-            section["status"] = "MISMATCH"
-            section["reason"] = "Employment started before graduation"
-        else:
-            section["status"] = "PASS"
-
-        return section
-
-    def _build_contact_section(self, resume: ResumeData) -> dict:
-        section: dict = {"header": "Resume vs Contact", "status": "", "lines": [], "comparisons": [], "reason": ""}
-
-        issues = []
-        if not resume.email:
-            issues.append("No email address in resume")
-        if not resume.phone:
-            issues.append("No phone number in resume")
-        if not resume.name:
-            issues.append("No name in resume")
-
-        if issues:
-            section["status"] = "NOT_EVALUATED"
-            section["reason"] = "; ".join(issues)
-        else:
-            section["status"] = "PASS"
-            section["lines"].append(f"Name: {resume.name}")
-            section["lines"].append(f"Email: {resume.email}")
-            section["lines"].append(f"Phone: {resume.phone}")
-
-        return section
-
     def _check_name(self, resume: ResumeData, candidate: AtsCandidate) -> list[dict]:
         results = []
         if candidate.first_name and resume.name:
@@ -356,36 +223,6 @@ class CrossFieldValidator:
             })
         return results
 
-    def _check_company_employer(self, resume: ResumeData, company: CompanyData) -> list[dict]:
-        results = []
-        if company.is_verified and resume.experience:
-            first_employer = resume.experience[0].company
-            if first_employer and company.company_name:
-                match = first_employer.lower().strip() == company.company_name.lower().strip()
-                results.append({
-                    "source_field": "Resume Employer",
-                    "source_value": first_employer,
-                    "compare_to": "Verified Company",
-                    "target_value": company.company_name,
-                    "result": "MATCH" if match else "MISMATCH",
-                })
-        return results
-
-    def _check_linkedin_employer(self, resume: ResumeData, linkedin: LinkedInData) -> list[dict]:
-        results = []
-        if linkedin.employer_match is not None and resume.experience:
-            first_employer = resume.experience[0].company
-            if first_employer:
-                match = linkedin.employer_match
-                results.append({
-                    "source_field": "Resume Employer",
-                    "source_value": first_employer,
-                    "compare_to": "LinkedIn Employer",
-                    "target_value": linkedin.experience[0].get("company", "unknown") if linkedin.experience else "unknown",
-                    "result": "MATCH" if match else "MISMATCH",
-                })
-        return results
-
     def _check_skills(self, resume: ResumeData, candidate: AtsCandidate | None) -> dict | None:
         if not candidate or not candidate.skills or not resume.skills:
             return None
@@ -409,36 +246,3 @@ class CrossFieldValidator:
             "match_percentage": match_pct,
             "total_skills": max(len(ats_skills | resume_skills), 1),
         }
-
-    def _check_graduation_vs_employment(self, resume: ResumeData) -> list[dict]:
-        results = []
-        for edu in resume.education or []:
-            if not edu.end_date:
-                continue
-            try:
-                grad_year = int(edu.end_date[:4])
-                for exp in resume.experience or []:
-                    if not exp.start_date:
-                        continue
-                    try:
-                        start_year = int(exp.start_date[:4])
-                        if "intern" in (exp.title or "").lower():
-                            continue
-                        valid = start_year >= grad_year - 1
-                        results.append({
-                            "source_field": "Resume Graduation Date",
-                            "source_value": edu.end_date[:4],
-                            "compare_to": "Employment Start Date",
-                            "target_value": exp.start_date[:4],
-                            "result": "TIMELINE",
-                            "valid": valid,
-                            "grad_year": grad_year,
-                            "start_year": start_year,
-                            "company": exp.company or "unknown",
-                            "institution": edu.institution or "unknown",
-                        })
-                    except (ValueError, TypeError):
-                        pass
-            except (ValueError, TypeError):
-                pass
-        return results
