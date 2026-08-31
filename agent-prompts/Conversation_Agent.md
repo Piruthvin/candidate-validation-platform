@@ -26,53 +26,25 @@ Every tool invocation sends a POST request with a JSON body.
 Every endpoint accepts only `application/json`.
 No path parameters. No query parameters.
 
-## Tool 1 — List ATS Candidates
+## Tool 1  Get Candidate Details
 
 Request:
 ```json
 {
-  "page": 1,
-  "page_size": 20,
-  "search": "",
-  "status": "",
-  "sort_by": "created_time",
-  "sort_order": "desc",
-  "recommendation": null,
-  "validation_status": null
+  "record_id": "591003000063456008"
 }
 ```
 
-Response: `{ "total": 46, "data": [ { candidate items } ] }`
-
-Use when the recruiter asks to list, browse, or view all candidates.
-
-## Tool 2  Get Candidate Details
-
-Request:
-```json
-{
-  "candidate_id": "ZR_0001"
-}
-```
-
-Response: Full `AtsCandidate` object with `first_name`, `last_name`, `email`, `phone`, `skills`, `current_employer`, `location`, `validation_status`, `recommendation`, `report_url`, `blob_id`.
+Response: Full `AtsCandidate` object with `first_name`, `last_name`, `email`, `phone`, `skills`, `current_employer`, `location`, `experience`.
 
 Use when the recruiter asks about a specific candidate by ID.
 
-##Tool 3 Search Candidates
+##Tool 2 Search Candidates
 
 Request:
 ```json
 {
-  "candidate_id": "",
-  "name": "",
-  "email": "",
-  "phone": "",
-  "company": "",
-  "recommendation": "",
-  "validation_status": "",
-  "page": 1,
-  "page_size": 20
+  "record_id":
 }
 ```
 
@@ -80,19 +52,8 @@ Response: `{ "total": 5, "data": [ { matching candidates } ] }`
 
 Use when the recruiter searches by name, email, phone, company, or wants to filter by validation status or recommendation.
 
-## Tool 4 Get Latest Report
-Request:
-```json
-{
-  "candidate_id": "ZR_0001"
-}
-```
 
-Response: `{ "blob_id": "...", "report_url": "...", "created_time": "...", "candidate_id": "ZR_0001" }`
-
-Use when the recruiter asks for a candidate's report, validation results, or report link.
-
-##Tool 5 Fetch Report by Blob ID
+##Tool 3 Fetch Report by Blob ID
 
 Request:
 ```json
@@ -105,23 +66,16 @@ Response: `{ "blob_id": "...", "report_url": "...", "created_time": "...", "cand
 
 Use when the recruiter has a specific blob ID or report identifier.
 
-##Tool 6 Search Reports
+##Tool 4 Search ats attachments
 
 Request:
 ```json
 {
-  "candidate_id": "",
-  "candidate_name": "",
-  "recommendation": "",
-  "validation_status": "",
-  "date_from": "",
-  "date_to": "",
-  "page": 1,
-  "page_size": 20
+  "record_id": ""
 }
 ```
 
-Response: `{ "total": 3, "data": [ { report results } ] }`
+Response: `{ "data": [ { report results } ] }`
 
 Use when the recruiter wants to find reports by candidate details or filter by recommendation status.
 

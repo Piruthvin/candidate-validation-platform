@@ -70,12 +70,7 @@ async def main():
         assert r.status_code == 200
         assert r.json()["blob_id"] == "report-CAND-001-20260101.html"
 
-        print("\n=== 4. Testing POST /api/v1/reports/latest (not found) ===")
-        r = await client.post("/api/v1/reports/latest", json={"candidate_id": "NON_EXISTENT_ID"})
-        print(f"Status: {r.status_code}")
-        assert r.status_code == 404
-
-        print("\n=== 5. Testing OpenAPI schema has only 9 endpoints ===")
+        print("\n=== 4. Testing OpenAPI schema endpoints ===")
         r = await client.get("/openapi.json")
         schema = r.json()
         paths = schema.get("paths", {})
@@ -87,11 +82,9 @@ async def main():
         expected_paths = {
             "/api/v1/validation/validate",
             "/api/v1/reports/generate",
-            "/api/v1/reports/latest",
             "/api/v1/reports/blob",
-            "/api/v1/reports/search",
-            "/api/v1/ats/candidates",
             "/api/v1/ats/candidate",
+            "/api/v1/ats/attachments",
             "/api/v1/ats/search",
             "/health",
         }

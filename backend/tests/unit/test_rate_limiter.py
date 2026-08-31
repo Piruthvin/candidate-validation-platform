@@ -94,7 +94,7 @@ def _make_test_app(limits=None):
     routes = [
         Route("/api/v1/validation/validate", endpoint=ok_route, methods=["POST"]),
         Route("/api/v1/reports/generate", endpoint=ok_route, methods=["POST"]),
-        Route("/api/v1/ats/candidates", endpoint=ok_route, methods=["POST"]),
+        Route("/api/v1/ats/candidate", endpoint=ok_route, methods=["POST"]),
         Route("/health", endpoint=ok_route, methods=["GET"]),
     ]
     app = Starlette(routes=routes)
@@ -113,7 +113,7 @@ def test_match_limit():
     mw = RateLimiterMiddleware(app=None, storage=MemoryRateLimitStorage())  # type: ignore[arg-type]
     assert mw._match_limit("/api/v1/validation/validate") == (30, 60)
     assert mw._match_limit("/api/v1/reports/generate") == (20, 60)
-    assert mw._match_limit("/api/v1/ats/candidates") == (60, 60)
+    assert mw._match_limit("/api/v1/ats/candidate") == (60, 60)
     assert mw._match_limit("/unknown") is None
 
 
@@ -181,7 +181,7 @@ async def test_different_limits_per_path(client):
 
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         for _ in range(35):
-            resp = await ac.post("/api/v1/ats/candidates")
+            resp = await ac.post("/api/v1/ats/candidate")
             if resp.status_code == 429:
                 ats_limited = True
                 break

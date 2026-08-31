@@ -83,4 +83,5 @@ async def main():
         json.dump(results, f, indent=2)
     print("\nDone! Results saved to minimal_test_results.json")
 
-asyncio.run(main())
+if __name__ == "__main__":
+    asyncio.run(main())

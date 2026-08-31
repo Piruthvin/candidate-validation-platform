@@ -1,3 +1,4 @@
+from difflib import SequenceMatcher
 import logging
 import re
 from typing import Any
@@ -5,6 +6,24 @@ from typing import Any
 from app.domain.models import AtsCandidate, CompanyData, LinkedInData, ResumeData, ValidationEvidence, ValidationStatus
 
 logger = logging.getLogger(__name__)
+
+
+def normalize_text(t: str) -> str:
+    """Normalize text for cross-field comparison."""
+    if not t or not isinstance(t, str):
+        return ""
+    return t.lower().replace("-", " ").strip()
+
+
+def titles_match(t1: str, t2: str) -> bool:
+    """Check if job titles match using substring or similarity ratio > 0.8."""
+    n1 = normalize_text(t1)
+    n2 = normalize_text(t2)
+    if not n1 or not n2:
+        return False
+    if n1 in n2 or n2 in n1:
+        return True
+    return SequenceMatcher(None, n1, n2).ratio() > 0.8
 
 
 class CrossFieldValidator:
@@ -65,18 +84,29 @@ class CrossFieldValidator:
         evidence.append("")
         evidence.append("Overall")
 
-        if has_mismatch:
+        # Major vs Minor Mismatches
+        major_mismatches = 0
+        for comp in comparisons:
+            if comp.get("result") == "MISMATCH":
+                field = comp.get("source_field", "")
+                if "Name" in field or "Email" in field or "Phone" in field:
+                    major_mismatches += 2
+                else:
+                    major_mismatches += 1
+
+        # Section 4: Only fail if major mismatch count >= 4
+        if major_mismatches >= 4:
             status = ValidationStatus.FAILED
             evidence.append("  FAIL")
-            reasons = [s.get("reason", "Contradiction detected") for s in all_sections if s["status"] == "MISMATCH"]
+            reasons = [s.get("reason", "Major contradiction detected") for s in all_sections if s["status"] == "MISMATCH"]
             evidence.append("  Reason")
             evidence.append(f"  {'; '.join(reasons)}")
-        elif has_not_evaluated:
+        elif has_mismatch or has_not_evaluated:
             status = ValidationStatus.WARNING
             evidence.append("  WARNING")
-            reasons = [s["reason"] for s in all_sections if s["status"] == "NOT_EVALUATED"]
+            reasons = [s["reason"] for s in all_sections if s.get("reason")]
             evidence.append("  Reason")
-            evidence.append(f"  Cross-field validation is incomplete because {' and '.join(reasons)}.")
+            evidence.append(f"  Cross-field validation completed with warnings: {'; '.join(reasons) if reasons else 'Minor discrepancies'}.")
         else:
             status = ValidationStatus.PASSED
             evidence.append("  PASS")
@@ -85,12 +115,11 @@ class CrossFieldValidator:
         not_evaluated_count = sum(1 for s in all_sections if s["status"] == "NOT_EVALUATED")
 
         failure_reason = ""
-        if has_mismatch:
-            reasons = [s.get("reason", "Contradiction detected") for s in all_sections if s["status"] == "MISMATCH"]
+        if status == ValidationStatus.FAILED:
+            reasons = [s.get("reason", "Major contradiction detected") for s in all_sections if s["status"] == "MISMATCH"]
             failure_reason = "; ".join(reasons)
-        elif has_not_evaluated:
-            reasons = [s["reason"] for s in all_sections if s["status"] == "NOT_EVALUATED"]
-            failure_reason = f"Cross-field validation is incomplete because {' and '.join(reasons)}."
+        elif status == ValidationStatus.WARNING:
+            failure_reason = "Cross-field validation completed with warnings"
 
         missing_information = []
         if candidate is None:
@@ -98,7 +127,7 @@ class CrossFieldValidator:
 
         confidence = 100.0
         if mismatch_count > 0:
-            confidence -= min(mismatch_count * 15, 50)
+            confidence -= min(mismatch_count * 10, 40)
         if not_evaluated_count > 0:
             confidence -= min(not_evaluated_count * 10, 30)
         confidence = max(confidence, 0.0)
@@ -113,6 +142,7 @@ class CrossFieldValidator:
             details={
                 "total_comparisons": len(comparisons),
                 "mismatches": mismatch_count,
+                "major_mismatches": major_mismatches,
                 "not_evaluated": not_evaluated_count,
                 "comparisons": comparisons,
                 "checks_performed": checks_performed,
@@ -142,6 +172,11 @@ class CrossFieldValidator:
         skills_comp = self._check_skills(resume, candidate)
         if skills_comp:
             sub_comparisons.append(skills_comp)
+
+        sub_comparisons.extend(self._check_employers(resume, candidate))
+        sub_comparisons.extend(self._check_experience_details(resume, candidate))
+        sub_comparisons.extend(self._check_experience_years(resume, candidate))
+        sub_comparisons.extend(self._check_projects(resume, candidate))
 
         has_mismatch = False
         for comp in sub_comparisons:
@@ -246,3 +281,127 @@ class CrossFieldValidator:
             "match_percentage": match_pct,
             "total_skills": max(len(ats_skills | resume_skills), 1),
         }
+
+    def _check_employers(self, resume: ResumeData, candidate: AtsCandidate) -> list[dict]:
+        results = []
+        if not candidate.current_employer:
+            return results
+
+        ats_emp = candidate.current_employer.strip()
+        resume_employers = [
+            (exp.company or "").strip()
+            for exp in (resume.experience or [])
+            if (exp.company or "").strip()
+        ]
+
+        if not resume_employers:
+            return results
+
+        # Check if ATS current employer is present anywhere in resume employers
+        matched = any(
+            ats_emp.lower() in re_emp.lower() or re_emp.lower() in ats_emp.lower()
+            for re_emp in resume_employers
+        )
+
+        results.append({
+            "source_field": "Resume Employers",
+            "source_value": ", ".join(resume_employers),
+            "compare_to": "ATS Current Employer",
+            "target_value": ats_emp,
+            "result": "MATCH" if matched else "MISMATCH",
+        })
+        return results
+
+    def _check_experience_details(self, resume: ResumeData, candidate: AtsCandidate) -> list[dict]:
+        results = []
+        if not candidate.experience_details or not resume.experience:
+            return results
+
+        for ats_exp in candidate.experience_details:
+            if not ats_exp.company:
+                continue
+
+            ats_co = ats_exp.company.strip().lower()
+            for res_exp in resume.experience:
+                res_co = (res_exp.company or "").strip().lower()
+                if not res_co:
+                    continue
+
+                if ats_co in res_co or res_co in ats_co:
+                    # Compare Job Titles
+                    if ats_exp.title and res_exp.title:
+                        title_match = titles_match(res_exp.title, ats_exp.title)
+                        results.append({
+                            "source_field": f"Resume Title at {res_exp.company}",
+                            "source_value": res_exp.title,
+                            "compare_to": f"ATS Title at {ats_exp.company}",
+                            "target_value": ats_exp.title,
+                            "result": "MATCH" if title_match else "MISMATCH",
+                        })
+
+                    # Compare Start Dates (year comparison if both present)
+                    if ats_exp.start_date and res_exp.start_date:
+                        ats_yr = str(ats_exp.start_date)[:4]
+                        res_yr = str(res_exp.start_date)[:4]
+                        if ats_yr.isdigit() and res_yr.isdigit():
+                            yr_match = abs(int(ats_yr) - int(res_yr)) <= 1
+                            results.append({
+                                "source_field": f"Resume Start Date at {res_exp.company}",
+                                "source_value": str(res_exp.start_date),
+                                "compare_to": f"ATS Start Date at {ats_exp.company}",
+                                "target_value": str(ats_exp.start_date),
+                                "result": "MATCH" if yr_match else "MISMATCH",
+                            })
+        return results
+
+    def _check_experience_years(self, resume: ResumeData, candidate: AtsCandidate) -> list[dict]:
+        results = []
+        if candidate.total_experience_years is None:
+            return results
+
+        ats_years = candidate.total_experience_years
+        resume_years = 0.0
+
+        for exp in (resume.experience or []):
+            if exp.start_date and exp.end_date:
+                try:
+                    s_yr = int(str(exp.start_date)[:4])
+                    e_yr = int(str(exp.end_date)[:4])
+                    if e_yr >= s_yr:
+                        resume_years += (e_yr - s_yr)
+                except (ValueError, TypeError):
+                    pass
+
+        if resume_years > 0:
+            diff = abs(ats_years - resume_years)
+            match = diff <= 2.5
+            results.append({
+                "source_field": "Resume Estimated Experience",
+                "source_value": f"{resume_years:.1f} years",
+                "compare_to": "ATS Total Experience",
+                "target_value": f"{ats_years:.1f} years",
+                "result": "MATCH" if match else "MISMATCH",
+            })
+        return results
+
+    def _check_projects(self, resume: ResumeData, candidate: AtsCandidate) -> list[dict]:
+        results = []
+        if not candidate.experience_details or not resume.projects:
+            return results
+
+        all_summaries = " ".join((exp.summary or "").lower() for exp in candidate.experience_details)
+        if not all_summaries.strip():
+            return results
+
+        for proj in resume.projects:
+            p_name = (proj.name or "").strip()
+            if len(p_name) >= 3 and p_name.lower() in all_summaries:
+                results.append({
+                    "source_field": f"Resume Project '{p_name}'",
+                    "source_value": p_name,
+                    "compare_to": "ATS Experience Summaries",
+                    "target_value": "Referenced in ATS project summaries",
+                    "result": "MATCH",
+                })
+        return results
+

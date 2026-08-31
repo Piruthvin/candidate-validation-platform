@@ -51,7 +51,11 @@ class AzureBlobService:
             self._initialized = True
             return
         try:
-            self._client = BlobServiceClient.from_connection_string(self._connection_string)
+            self._client = BlobServiceClient.from_connection_string(
+                self._connection_string,
+                connection_timeout=5,
+                read_timeout=5,
+            )
             container = self._client.get_container_client(self._container_name)
             try:
                 await container.create_container()

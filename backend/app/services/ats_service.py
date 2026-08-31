@@ -7,7 +7,7 @@ import httpx
 
 from app.core.config import Settings
 from app.core.exceptions import AtsCandidateNotFound, AtsException
-from app.domain.models import AtsCandidate, AtsCandidateList, AtsCandidateListItem, AtsSearchParams
+from app.domain.models import AtsCandidate, AtsExperienceItem
 
 logger = logging.getLogger(__name__)
 
@@ -16,13 +16,7 @@ class AtsService:
     REQUEST_TIMEOUT = 30.0
 
     def __init__(self, settings: Settings) -> None:
-        self._client_id = settings.zoho_client_id
-        self._client_secret = settings.zoho_client_secret
-        self._refresh_token = settings.zoho_refresh_token
-        self._accounts_url = settings.zoho_accounts_url
-        self._api_base_url = settings.zoho_api_base_url
-        self._access_token: str | None = None
-        self._token_lock = asyncio.Lock()
+        self._proxy_base_url = settings.ats_proxy_base_url
         self._client: httpx.AsyncClient | None = None
 
     async def _get_client(self) -> httpx.AsyncClient:
@@ -35,249 +29,103 @@ class AtsService:
             await self._client.aclose()
             self._client = None
 
-    async def _ensure_token(self, client: httpx.AsyncClient) -> str:
-        async with self._token_lock:
-            if self._access_token:
-                return self._access_token
-            if not self._refresh_token:
-                raise AtsException("Zoho refresh token not configured")
-            logger.info("ATS refreshing OAuth token from %s", self._accounts_url)
-            started = time.monotonic()
-            resp = await client.post(
-                f"{self._accounts_url}/oauth/v2/token",
-                data={
-                    "refresh_token": self._refresh_token,
-                    "client_id": self._client_id,
-                    "client_secret": self._client_secret,
-                    "grant_type": "refresh_token",
-                },
-            )
-            elapsed = time.monotonic() - started
-            if resp.status_code != 200:
-                logger.error("ATS token refresh failed: HTTP %d after %.2fs - %s", resp.status_code, elapsed, resp.text[:300])
-                raise AtsException(f"Zoho token refresh failed: HTTP {resp.status_code}")
-            data = resp.json()
-            self._access_token = data.get("access_token", "")
-            if not self._access_token:
-                raise AtsException("No access_token in Zoho token refresh response")
-            logger.info("ATS token refreshed successfully (%.2fs)", elapsed)
-            return self._access_token
-
-    def _sanitize_params(self, params: dict[str, Any]) -> dict[str, Any]:
-        """Strip None, empty string values and unsupported parameters before calling Zoho API."""
-        return {k: str(v) for k, v in params.items() if v is not None and str(v).strip() != ""}
-
-    async def fetch_candidate(self, candidate_id: str, resume: Any = None) -> AtsCandidate:
-        started = time.monotonic()
-        logger.info("ATS fetch_candidate: candidate_id=%s", candidate_id)
-
-        record_id = await self._resolve_candidate_id(candidate_id, resume)
-        if not record_id:
-            elapsed = time.monotonic() - started
-            logger.error("ATS candidate_id=%s could not be resolved to any Record ID (%.2fs)", candidate_id, elapsed)
-            raise AtsException(f"Candidate {candidate_id} not found")
-
-        ats_candidate = await self._fetch_by_record_id(record_id, candidate_id)
-        elapsed = time.monotonic() - started
-        logger.info(
-            "ATS fetch_candidate success: candidate_id=%s record_id=%s name=%s %s (%.2fs)",
-            candidate_id, record_id,
-            ats_candidate.first_name, ats_candidate.last_name, elapsed,
-        )
-        return ats_candidate
-
-    async def _resolve_candidate_id(self, candidate_id: str, resume: Any = None) -> str | None:
-        if candidate_id.isdigit():
-            logger.info("ATS candidate_id=%s is numeric, treating as Record ID", candidate_id)
-            return candidate_id
-
-        result = await self._search_candidates("Candidate_ID", candidate_id)
-        if result:
-            return result
-
-        if resume:
-            email = getattr(resume, "email", None) or (resume.get("email") if isinstance(resume, dict) else None)
-            if email:
-                result = await self._search_candidates("Email", email)
-                if result:
-                    return result
-
-            phone = getattr(resume, "phone", None) or (resume.get("phone") if isinstance(resume, dict) else None)
-            if phone:
-                result = await self._search_candidates("Phone", phone)
-                if result:
-                    return result
-
-        return None
-
-    async def _search_candidates(self, field: str, value: str) -> str | None:
-        started = time.monotonic()
+    async def fetch_candidate(self, record_id: str, resume: Any = None) -> AtsCandidate:
         client = await self._get_client()
-        token = await self._ensure_token(client)
-        headers = {"Authorization": f"Zoho-oauthtoken {token}"}
-        criteria = f"({field}:equals:{value})"
-        url = f"{self._api_base_url}/Candidates/search"
-        params = self._sanitize_params({"criteria": criteria})
 
-        logger.info("ATS search: GET %s criteria=%s", url, criteria)
-        resp = await client.get(url, headers=headers, params=params)
-        elapsed = time.monotonic() - started
+        url = f"{self._proxy_base_url}?path=/recruit/v2/Candidates/{record_id}"
+        logger.info("ATS fetch_candidate via proxy: GET %s", url)
 
-        if resp.status_code == 200:
-            body = resp.json()
-            records = body.get("data", [])
-            if records:
-                record_id = str(records[0].get("id", ""))
-                logger.info(
-                    "ATS search by %s=%s found: record_id=%s, name=%s %s (%.2fs)",
-                    field, value, record_id,
-                    records[0].get("First_Name"), records[0].get("Last_Name"),
-                    elapsed,
+        resp = await client.get(url)
+
+        if resp.status_code != 200:
+            raise AtsException(f"Proxy fetch failed: HTTP {resp.status_code} - {resp.text[:300]}")
+
+        data = resp.json().get("data", [{}])[0]
+        raw_exp = data.get("Experience_Details") or []
+        experience_details: list[AtsExperienceItem] = []
+        for item in raw_exp:
+            work_dur = item.get("Work_Duration") or {}
+            experience_details.append(
+                AtsExperienceItem(
+                    company=item.get("Company"),
+                    title=item.get("Occupation_Title"),
+                    start_date=work_dur.get("from"),
+                    end_date=work_dur.get("to"),
+                    currently_works_here=bool(item.get("I_currently_work_here")),
+                    summary=item.get("Summary"),
+                    id=str(item.get("id")) if item.get("id") is not None else None,
                 )
-                return record_id
-            logger.info("ATS search by %s=%s returned 0 results (%.2fs)", field, value, elapsed)
-            return None
-
-        if resp.status_code == 204:
-            logger.info("ATS search by %s=%s returned 204 (no content)", field, value)
-            return None
-
-        body_snippet = resp.text[:300]
-        if resp.status_code == 401:
-            self._access_token = None
-            raise AtsException(f"ATS authentication failed: HTTP 401 during search by {field}")
-        if resp.status_code == 403:
-            raise AtsException(f"ATS permission denied: HTTP 403 during search by {field}")
-        if resp.status_code == 429:
-            raise AtsException(f"ATS rate limit exceeded: HTTP 429 during search by {field}")
-        logger.error(
-            "ATS search by %s=%s failed: HTTP %d - %s (%.2fs)",
-            field, value, resp.status_code, body_snippet, elapsed,
-        )
-        raise AtsException(f"ATS search error: HTTP {resp.status_code} for criteria ({field}:equals:{value})")
-
-    async def _fetch_by_record_id(self, record_id: str, original_candidate_id: str) -> AtsCandidate:
-        started = time.monotonic()
-        client = await self._get_client()
-        token = await self._ensure_token(client)
-        headers = {"Authorization": f"Zoho-oauthtoken {token}"}
-        url = f"{self._api_base_url}/Candidates/{record_id}"
-
-        logger.info("ATS fetch: GET %s", url)
-        resp = await client.get(url, headers=headers)
-        elapsed = time.monotonic() - started
-
-        if resp.status_code == 200:
-            data = resp.json().get("data", [{}])[0]
-            candidate_id = data.get("Candidate_ID", original_candidate_id)
-            logger.info(
-                "ATS fetch record_id=%s -> Candidate_ID=%s, name=%s %s (%.2fs)",
-                record_id, candidate_id,
-                data.get("First_Name"), data.get("Last_Name"), elapsed,
             )
-            return self._record_to_candidate(candidate_id, data)
 
-        body_snippet = resp.text[:500]
-        if resp.status_code == 401:
-            self._access_token = None
-            raise AtsException(f"ATS authentication failed: HTTP 401 for record {record_id}")
-        if resp.status_code == 403:
-            raise AtsException(f"ATS permission denied: HTTP 403 for record {record_id}")
-        if resp.status_code == 404:
-            logger.warning("ATS fetch record_id=%s -> 404. Body: %s", record_id, body_snippet)
-            raise AtsException(f"Candidate Record ID {record_id} not found (HTTP 404)")
-        if resp.status_code == 429:
-            raise AtsException(f"ATS rate limit exceeded: HTTP 429 for record {record_id}")
-        logger.error(
-            "ATS fetch record_id=%s failed: HTTP %d - %s (%.2fs)",
-            record_id, resp.status_code, body_snippet, elapsed,
+        return self._record_to_candidate(
+            record_id=str(record_id),
+            candidate_id=data.get("Candidate_ID") or str(record_id),
+            data=data,
+            experience_details=experience_details,
         )
-        raise AtsException(f"ATS request failed: HTTP {resp.status_code} for record {record_id}")
+
+    async def fetch_attachments(self, record_id: str) -> list[dict]:
+        client = await self._get_client()
+
+        url = f"{self._proxy_base_url}?path=/recruit/v2/Candidates/{record_id}/attachments"
+
+        resp = await client.get(url)
+
+        if resp.status_code != 200:
+            return []
+
+        return resp.json().get("data", [])
 
     @staticmethod
-    def _record_to_candidate(candidate_id: str, data: dict) -> AtsCandidate:
+    def _record_to_candidate(
+        record_id: str,
+        candidate_id: str,
+        data: dict,
+        attachments: list[dict] | None = None,
+        experience_details: list[AtsExperienceItem] | None = None,
+    ) -> AtsCandidate:
         skills_raw = data.get("Skill_Set")
         if isinstance(skills_raw, list):
             skills = [s.strip() for s in skills_raw if isinstance(s, str) and s.strip()]
         else:
             skills = [s.strip() for s in (skills_raw or "").split(",") if s.strip()]
 
+        phone = data.get("Phone") or data.get("Mobile")
+        location = (
+            data.get("Location")
+            or data.get("Current_Location")
+            or f"{data.get('City', '') or ''} {data.get('State', '') or ''} {data.get('Country', '') or ''}".strip()
+            or None
+        )
+
+        total_exp = AtsService._parse_float(data.get("Experience_in_Years"))
+        if total_exp is None:
+            total_exp = AtsService._parse_float(data.get("Total_Work_Experience"))
+
         return AtsCandidate(
+            record_id=record_id,
             candidate_id=candidate_id,
             first_name=data.get("First_Name"),
             last_name=data.get("Last_Name"),
             email=data.get("Email"),
-            phone=data.get("Phone"),
+            phone=phone,
             skills=skills,
-            total_experience_years=AtsService._parse_float(data.get("Experience_in_Years")),
+            total_experience_years=total_exp,
             current_employer=data.get("Current_Employer"),
-            location=data.get("Location") or f"{data.get('City', '') or ''} {data.get('State', '') or ''} {data.get('Country', '') or ''}".strip(),
+            location=location,
+            attachments=attachments or [],
+            experience_details=experience_details or [],
         )
-
-    async def list_candidates(self, params: AtsSearchParams = AtsSearchParams()) -> AtsCandidateList:
-        started = time.monotonic()
-        client = await self._get_client()
-        token = await self._ensure_token(client)
-        headers = {"Authorization": f"Zoho-oauthtoken {token}"}
-
-        if params.search:
-            url = f"{self._api_base_url}/Candidates/search"
-            request_params = self._sanitize_params({
-                "page": params.page,
-                "per_page": params.page_size,
-                "criteria": f"(First_Name:starts_with:{params.search})",
-            })
-        else:
-            url = f"{self._api_base_url}/Candidates"
-            request_params = self._sanitize_params({
-                "page": params.page,
-                "per_page": params.page_size,
-            })
-
-        logger.info("ATS list: GET %s params=%s", url, request_params)
-        resp = await client.get(url, headers=headers, params=request_params)
-        elapsed = time.monotonic() - started
-
-        if resp.status_code == 204:
-            logger.info("ATS list returned 204 (no content)")
-            return AtsCandidateList(total=0, data=[])
-
-        if resp.status_code != 200:
-            raise AtsException(f"Zoho list API error: HTTP {resp.status_code} - {resp.text[:300]}")
-
-        data = resp.json()
-        items = [
-            AtsCandidateListItem(
-                candidate_id=record.get("Candidate_ID", record.get("id", "")),
-                first_name=record.get("First_Name"),
-                last_name=record.get("Last_Name"),
-                email=record.get("Email"),
-                phone=record.get("Phone"),
-                current_employer=record.get("Current_Employer"),
-                location=record.get("Location") or f"{record.get('City', '') or ''} {record.get('State', '') or ''} {record.get('Country', '') or ''}".strip(),
-                created_time=record.get("Created_Time"),
-            )
-            for record in data.get("data", [])
-        ]
-        total = data.get("info", {}).get("count", len(items))
-        logger.info("ATS list returned %d items of %d total (%.2fs)", len(items), total, elapsed)
-        return AtsCandidateList(total=total, data=items)
 
     async def check_connection(self) -> dict[str, Any]:
         started = time.monotonic()
         try:
             client = await self._get_client()
-            token = await self._ensure_token(client)
-            headers = {"Authorization": f"Zoho-oauthtoken {token}"}
-            resp = await client.get(
-                f"{self._api_base_url}/Candidates",
-                headers=headers,
-                params={"page": 1, "per_page": 1},
-                timeout=10.0,
-            )
+            url = f"{self._proxy_base_url}?path=/recruit/v2/Candidates/591003000063456008"
+            resp = await client.get(url, timeout=15.0)
             elapsed = time.monotonic() - started
-            connected = resp.status_code == 200
-            logger.info("ATS connection check -> HTTP %d connected=%s (%.2fs)", resp.status_code, connected, elapsed)
+            connected = resp.status_code in (200, 204)
+            logger.info("ATS connection check via proxy -> HTTP %d connected=%s (%.2fs)", resp.status_code, connected, elapsed)
             return {"connected": connected}
         except Exception as e:
             logger.error("ATS connection check failed: %s", e)

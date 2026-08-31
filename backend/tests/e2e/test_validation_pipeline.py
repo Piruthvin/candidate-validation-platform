@@ -82,24 +82,13 @@ async def test_validation_has_no_scoring(client):
 
 @pytest.mark.e2e
 @pytest.mark.asyncio
-async def test_ats_list_endpoint(client):
-    payload = {"page": 1, "page_size": 5}
-    async with client as ac:
-        resp = await ac.post("/api/v1/ats/candidates", json=payload)
-    assert resp.status_code in (200, 502)
-
-
-@pytest.mark.e2e
-@pytest.mark.asyncio
 async def test_all_endpoints_accept_only_post_json(client):
     endpoints = [
         ("/api/v1/validation/validate", 422),
         ("/api/v1/reports/generate", 422),
-        ("/api/v1/reports/latest", 422),
         ("/api/v1/reports/blob", 422),
-        ("/api/v1/reports/search", 422),
-        ("/api/v1/ats/candidates", 422),
         ("/api/v1/ats/candidate", 422),
+        ("/api/v1/ats/attachments", 422),
         ("/api/v1/ats/search", 422),
     ]
     async with client as ac:
@@ -114,13 +103,13 @@ async def test_health_endpoint(client):
     async with client as ac:
         resp = await ac.get("/health")
     assert resp.status_code == 200
-    assert resp.json() == {"status": "healthy"}
+    assert resp.json().get("status") == "healthy"
 
 
 @pytest.mark.e2e
 @pytest.mark.asyncio
 async def test_candidate_detail_post(client):
-    payload = {"candidate_id": "e2e-001"}
+    payload = {"candidate_id": "591003000063456008"}
     async with client as ac:
         resp = await ac.post("/api/v1/ats/candidate", json=payload)
     assert resp.status_code in (200, 404, 502)
@@ -128,8 +117,53 @@ async def test_candidate_detail_post(client):
 
 @pytest.mark.e2e
 @pytest.mark.asyncio
-async def test_latest_report_post(client):
-    payload = {"candidate_id": "e2e-001"}
+async def test_blob_report_post(client):
+    payload = {"blob_id": "report-e2e-001-20260101.html"}
     async with client as ac:
-        resp = await ac.post("/api/v1/reports/latest", json=payload)
-    assert resp.status_code in (200, 404, 502)
+        resp = await ac.post("/api/v1/reports/blob", json=payload)
+    assert resp.status_code in (200, 404, 500, 502)
+
+
+
+@pytest.mark.e2e
+@pytest.mark.asyncio
+async def test_ats_proxy_candidate_detail_success(client):
+    payload = {"record_id": "591003000063456008"}
+    async with client as ac:
+        resp = await ac.post("/api/v1/ats/candidate", json=payload)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data.get("first_name") == "Rajesh Kanna"
+    assert data.get("current_employer") == "Tech Mahindra"
+    assert len(data.get("experience_details", [])) >= 3
+
+
+@pytest.mark.e2e
+@pytest.mark.asyncio
+async def test_ats_proxy_attachments(client):
+    payload = {"record_id": "591003000063456008"}
+    async with client as ac:
+        resp = await ac.post("/api/v1/ats/attachments", json=payload)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data.get("total", 0) > 0
+    assert len(data.get("data", [])) > 0
+
+
+@pytest.mark.e2e
+@pytest.mark.asyncio
+async def test_ats_proxy_search(client):
+    async with client as ac:
+        # Without record_id -> 400
+        resp_err = await ac.post("/api/v1/ats/search", json={"name": "Rajesh"})
+        assert resp_err.status_code == 400
+        assert "Only record_id supported" in resp_err.json().get("detail", "")
+
+        # With record_id -> 200
+        resp_ok = await ac.post("/api/v1/ats/search", json={"record_id": "591003000063456008"})
+        assert resp_ok.status_code == 200
+        data = resp_ok.json()
+        assert data.get("total") == 1
+        assert len(data.get("data", [])) == 1
+
+

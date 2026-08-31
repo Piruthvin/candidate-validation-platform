@@ -1,12 +1,12 @@
 import logging
 
-from app.domain.models import ResumeData, ValidationEvidence, ValidationStatus
+from app.domain.models import AtsCandidate, ResumeData, ValidationEvidence, ValidationStatus
 
 logger = logging.getLogger(__name__)
 
 
 class ProjectValidator:
-    async def validate(self, resume: ResumeData) -> ValidationEvidence:
+    async def validate(self, resume: ResumeData, ats_candidate: AtsCandidate | None = None) -> ValidationEvidence:
         projects = resume.projects or []
         evidence = []
 
@@ -69,7 +69,26 @@ class ProjectValidator:
         if status == ValidationStatus.PASSED:
             evidence.append(f"Project validation passed. All {len(projects)} project(s) have proper descriptions and technologies.")
 
+        ats_projects = []
+        if ats_candidate and ats_candidate.experience_details:
+            for exp in ats_candidate.experience_details:
+                summary = exp.summary or ""
+                for line in summary.split("\n"):
+                    line_s = line.strip()
+                    if line_s.lower().startswith("project-") or line_s.lower().startswith("project -"):
+                        p_name = line_s.split(":", 1)[0].replace("Project-", "").replace("Project -", "").strip()
+                        if p_name:
+                            ats_projects.append({"project": p_name, "company": exp.company})
+
+            if ats_projects:
+                evidence.append("ATS Experience Projects Identified")
+                for ap in ats_projects:
+                    evidence.append(f"  Project: {ap['project']} (at {ap['company'] or 'ATS Company'})")
+                evidence.append("")
+
         checks_performed = ["Generic description detection", "Technology presence check", "Duplicate project detection"]
+        if ats_projects:
+            checks_performed.append("ATS experience projects extraction")
         warnings = []
         if no_tech > 0 and no_tech < len(projects):
             warnings.append(f"{no_tech} project(s) with no technologies listed")

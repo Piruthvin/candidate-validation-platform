@@ -1,5 +1,6 @@
+from typing import Any
 from enum import Enum
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class ValidationStatus(str, Enum):
@@ -65,7 +66,18 @@ class ResumeData(BaseModel):
     sections_present: list[str] = Field(default_factory=list, max_length=100)
 
 
+class AtsExperienceItem(BaseModel):
+    company: str | None = None
+    title: str | None = None
+    start_date: str | None = None
+    end_date: str | None = None
+    currently_works_here: bool = False
+    summary: str | None = None
+    id: str | None = None
+
+
 class AtsCandidate(BaseModel):
+    record_id: str = ""
     candidate_id: str = ""
     first_name: str | None = None
     last_name: str | None = None
@@ -75,6 +87,12 @@ class AtsCandidate(BaseModel):
     total_experience_years: float | None = None
     current_employer: str | None = None
     location: str | None = None
+    attachments: list[dict] = Field(default_factory=list)
+    experience_details: list[AtsExperienceItem] = Field(default_factory=list)
+    report_url: str | None = None
+    blob_id: str | None = None
+    validation_status: str | None = None
+    recommendation: str | None = None
 
 
 class PossibleMatch(BaseModel):
@@ -163,6 +181,7 @@ class PreviousValidationReport(BaseModel):
 
 
 class ValidationResult(BaseModel):
+    record_id: str = ""
     candidate_id: str = ""
     candidate_name: str | None = None
     resume: ResumeData | None = None
@@ -192,9 +211,20 @@ class ValidationResult(BaseModel):
 
 
 class ValidateRequest(BaseModel):
-    candidate_id: str
+    record_id: str = Field(..., min_length=1)
     resume: dict
     linkedin_url: str | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def resolve_record_id(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            rid = data.get("record_id") if data.get("record_id") is not None else data.get("candidate_id")
+            if rid is not None and str(rid).strip():
+                data["record_id"] = str(rid).strip()
+            elif "record_id" in data or "candidate_id" in data:
+                data["record_id"] = ""
+        return data
 
 
 class CandidateInfo(BaseModel):
@@ -251,80 +281,79 @@ class ReportResult(BaseModel):
     blob_id: str = ""
     report_url: str = ""
     created_time: str = ""
+    record_id: str = ""
     candidate_id: str = ""
 
 
 class ReportGenerationRequest(BaseModel):
-    candidate_id: str = ""
+    record_id: str = ""
     candidate_info: CandidateInfo = Field(default_factory=CandidateInfo)
     validation_result: dict = Field(default_factory=dict)
     llm_analysis: LLMAnalysis = Field(default_factory=LLMAnalysis)
+
+    @model_validator(mode="before")
+    @classmethod
+    def resolve_record_id(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            rid = data.get("record_id") or data.get("candidate_id") or ""
+            data["record_id"] = str(rid)
+        return data
 
 
 class ReportGenerationResponse(BaseModel):
     blob_id: str = ""
     report_url: str = ""
     created_time: str = ""
+    record_id: str = ""
     candidate_id: str = ""
 
 
 # ── ATS DTOs ──────────────────────────────────────────────────────────────────
 
-class AtsSearchParams(BaseModel):
-    page: int = Field(default=1, ge=1)
-    page_size: int = Field(default=20, ge=1, le=100)
-    search: str | None = None
-    status: str | None = None
-    sort_by: str | None = None
-    sort_order: str | None = None
-
-
-class AtsCandidateListItem(BaseModel):
-    candidate_id: str = ""
-    first_name: str | None = None
-    last_name: str | None = None
-    email: str | None = None
-    phone: str | None = None
-    current_employer: str | None = None
-    location: str | None = None
-    created_time: str | None = None
-
-
-class AtsCandidateList(BaseModel):
-    total: int = 0
-    data: list[AtsCandidateListItem] = Field(default_factory=list)
-
-
-class CandidateListRequest(BaseModel):
-    page: int = Field(default=1, ge=1)
-    page_size: int = Field(default=20, ge=1, le=100)
-    search: str | None = None
-    status: str | None = None
-    sort_by: str | None = None
-    sort_order: str | None = None
-
-
-class CandidateListResponse(BaseModel):
-    total: int = 0
-    data: list[AtsCandidateListItem] = Field(default_factory=list)
-
 
 class CandidateDetailRequest(BaseModel):
-    candidate_id: str
+    record_id: str
+
+    @model_validator(mode="before")
+    @classmethod
+    def resolve_record_id(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            rid = data.get("record_id") or data.get("candidate_id") or ""
+            data["record_id"] = str(rid)
+        return data
 
 
 class CandidateDetailResponse(AtsCandidate):
     pass
 
 
+class CandidateAttachmentsRequest(BaseModel):
+    record_id: str
+
+    @model_validator(mode="before")
+    @classmethod
+    def resolve_record_id(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            rid = data.get("record_id") or data.get("candidate_id") or ""
+            data["record_id"] = str(rid)
+        return data
+
+
+class CandidateAttachmentsResponse(BaseModel):
+    total: int = 0
+    data: list[dict] = Field(default_factory=list)
+
+
 class CandidateSearchRequest(BaseModel):
-    candidate_id: str | None = None
-    name: str | None = None
-    email: str | None = None
-    phone: str | None = None
-    company: str | None = None
-    page: int = Field(default=1, ge=1)
-    page_size: int = Field(default=20, ge=1, le=100)
+    record_id: str
+
+    @model_validator(mode="before")
+    @classmethod
+    def resolve_record_id(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            rid = data.get("record_id") or data.get("candidate_id") or ""
+            data["record_id"] = str(rid)
+        return data
 
 
 class CandidateSearchResponse(BaseModel):
@@ -333,15 +362,7 @@ class CandidateSearchResponse(BaseModel):
 
 
 # ── Report DTOs ───────────────────────────────────────────────────────────────
-
-class LatestReportRequest(BaseModel):
-    candidate_id: str
-
-
-class LatestReportResponse(ReportResult):
-    pass
-
-
+ 
 class BlobReportRequest(BaseModel):
     blob_id: str
 
@@ -349,18 +370,3 @@ class BlobReportRequest(BaseModel):
 class BlobReportResponse(ReportResult):
     pass
 
-
-class ReportSearchRequest(BaseModel):
-    candidate_id: str | None = None
-    candidate_name: str | None = None
-    recommendation: str | None = None
-    validation_status: str | None = None
-    date_from: str | None = None
-    date_to: str | None = None
-    page: int = Field(default=1, ge=1)
-    page_size: int = Field(default=20, ge=1, le=100)
-
-
-class ReportSearchResponse(BaseModel):
-    total: int = 0
-    data: list[ReportResult] = Field(default_factory=list)

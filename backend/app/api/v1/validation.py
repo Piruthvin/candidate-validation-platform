@@ -24,7 +24,9 @@ async def validate_candidate(
         if "linkedin_url" not in resume_data or not resume_data.get("linkedin_url"):
             resume_data["linkedin_url"] = request.linkedin_url
     result = await engine.validate(
-        candidate_id=request.candidate_id,
+        candidate_id=request.record_id,
         resume_data=resume_data,
     )
+    result.record_id = request.record_id
     return result
+

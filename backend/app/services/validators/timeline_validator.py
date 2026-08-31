@@ -1,26 +1,19 @@
 import logging
 from datetime import datetime, timezone
 
-from app.domain.models import ResumeData, ValidationEvidence, ValidationStatus
+from app.domain.models import AtsCandidate, ResumeData, ValidationEvidence, ValidationStatus
+from app.services.validators.validation_utils import parse_flexible
 
 logger = logging.getLogger(__name__)
 
 
 def _normalize_datetime(value: str) -> datetime | None:
-    if not value or not value.strip():
+    if not value or not isinstance(value, str) or not value.strip():
         return None
-    try:
-        s = value.strip()
-        if s.upper().endswith("Z"):
-            s = s[:-1] + "+00:00"
-        if len(s) == 10 and s[4] == "-" and s[7] == "-":
-            s += "T00:00:00+00:00"
-        dt = datetime.fromisoformat(s)
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
-        return dt
-    except (ValueError, TypeError):
-        return None
+    dt = parse_flexible(value)
+    if dt is not None and dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt
 
 
 def _format_date(dt: datetime) -> str:
@@ -28,7 +21,7 @@ def _format_date(dt: datetime) -> str:
 
 
 class TimelineValidator:
-    async def validate(self, resume: ResumeData) -> ValidationEvidence:
+    async def validate(self, resume: ResumeData, ats_candidate: AtsCandidate | None = None) -> ValidationEvidence:
         entries = resume.experience or []
         evidence = []
 
@@ -126,30 +119,48 @@ class TimelineValidator:
         evidence.append("")
 
         status = ValidationStatus.PASSED
-        if overlaps > 0 or future_end > 0:
-            status = ValidationStatus.FAILED
-        elif gaps_found > 0:
+        if overlaps > 0:
+            status = ValidationStatus.WARNING
+        elif gaps_found > 0 or future_end > 0:
             status = ValidationStatus.WARNING
 
-        if status == ValidationStatus.PASSED:
-            evidence.append("Timeline validation passed. Employment history is consistent with no gaps or overlaps.")
+        ats_dated = []
+        if ats_candidate and ats_candidate.experience_details:
+            evidence.append("")
+            evidence.append("ATS Employment Timeline")
+            for a_exp in ats_candidate.experience_details:
+                s_val = a_exp.start_date
+                e_val = a_exp.end_date
+                s_dt = _normalize_datetime(s_val) if s_val else None
+                e_dt = _normalize_datetime(e_val) if e_val else None
+                if a_exp.currently_works_here:
+                    e_dt = now
+
+                line = f"  {a_exp.company or 'Unknown Company'}: {a_exp.title or 'Unknown Title'}"
+                if s_dt and e_dt:
+                    line += f" ({_format_date(s_dt)} to {'Present' if a_exp.currently_works_here else _format_date(e_dt)})"
+                    ats_dated.append((s_dt, e_dt, a_exp.company, a_exp.title))
+                elif s_dt:
+                    line += f" (From {_format_date(s_dt)})"
+                    ats_dated.append((s_dt, now if a_exp.currently_works_here else s_dt, a_exp.company, a_exp.title))
+                evidence.append(line)
 
         checks_performed = ["Gap analysis", "Overlap detection", "Future date check", "Timeline consistency"]
+        if ats_dated:
+            checks_performed.append("ATS timeline consistency")
         warnings = []
         if gaps_found > 0:
             warnings.append(f"{gaps_found} employment gap(s) detected totaling {total_gap_months} months")
         if overlaps > 0:
             warnings.append(f"{overlaps} overlapping employment period(s) detected")
         if future_end > 0:
-            warnings.append(f"{future_end} entr{'ies' if future_end != 1 else 'y'} with future end date")
+            warnings.append(f"Future end date detected for {future_end} entr{'ies' if future_end != 1 else 'y'}")
         issues = []
         failure_reason = ""
         if status == ValidationStatus.FAILED:
             parts = []
             if overlaps > 0:
                 parts.append(f"{overlaps} overlapping employment period(s)")
-            if future_end > 0:
-                parts.append(f"{future_end} future end date(s)")
             failure_reason = f"Timeline validation failed due to: {', '.join(parts)}"
 
         missing_information = []
