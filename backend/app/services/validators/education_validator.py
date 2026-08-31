@@ -1,7 +1,8 @@
 import logging
-from datetime import datetime, timezone
+from datetime import datetime
 
 from app.domain.models import ResumeData, ValidationEvidence, ValidationStatus
+from app.services.validators.validation_utils import parse_flexible
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +25,7 @@ class EducationValidator:
         missing_fields = 0
         duplicates = {}
 
-        now = datetime.now(timezone.utc)
+        now_naive = datetime.now()
 
         for edu in entries:
             entry = {
@@ -46,18 +47,25 @@ class EducationValidator:
                 inst = edu.institution.lower().strip()
                 duplicates[inst] = duplicates.get(inst, 0) + 1
 
-            if edu.start_date and edu.end_date:
-                try:
-                    start = datetime.fromisoformat(edu.start_date.replace("Z", "+00:00"))
-                    end = datetime.fromisoformat(edu.end_date.replace("Z", "+00:00"))
-                    if start > end:
-                        invalid_timelines += 1
-                        entry["issues"].append(f"Start date after end date ({edu.start_date} > {edu.end_date})")
-                    if end > now:
-                        future_dates += 1
-                        entry["issues"].append(f"Future graduation date ({edu.end_date})")
-                except (ValueError, TypeError):
-                    entry["issues"].append("Unparseable date format")
+            start = parse_flexible(edu.start_date) if edu.start_date else None
+            end = parse_flexible(edu.end_date) if edu.end_date else None
+
+            if start and start.tzinfo is not None:
+                start = start.replace(tzinfo=None)
+            if end and end.tzinfo is not None:
+                end = end.replace(tzinfo=None)
+
+            if start and end:
+                if start > end:
+                    invalid_timelines += 1
+                    entry["issues"].append(f"Start date after end date ({edu.start_date} > {edu.end_date})")
+                if end > now_naive:
+                    future_dates += 1
+                    entry["issues"].append(f"Future graduation date ({edu.end_date})")
+            elif end:
+                if end > now_naive:
+                    future_dates += 1
+                    entry["issues"].append(f"Future graduation date ({edu.end_date})")
 
             entry_details.append(entry)
 
@@ -78,11 +86,13 @@ class EducationValidator:
             evidence.append(f"Duplicate institutions: {', '.join(dupes)}")
             evidence.append("")
 
-        status = ValidationStatus.PASSED
-        if invalid_timelines > 0 or future_dates > 0:
+        # Determine status based on issues in education entries
+        if invalid_timelines > 0:
             status = ValidationStatus.FAILED
-        elif missing_fields > 0 or dupes:
+        elif future_dates > 0 or missing_fields > 0 or dupes:
             status = ValidationStatus.WARNING
+        else:
+            status = ValidationStatus.PASSED
 
         if status == ValidationStatus.PASSED:
             evidence.append(f"Education validation passed. All {len(entries)} entr{'ies' if len(entries) != 1 else 'y'} have valid institution, degree, and dates.")

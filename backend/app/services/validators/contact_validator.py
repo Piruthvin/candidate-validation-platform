@@ -145,15 +145,19 @@ class ContactValidator:
         # IF invalid / critical error -> FAILED
         # IF partially valid / non-critical warning -> WARNING
         # IF fully valid -> PASSED
-        has_critical_error = (
+        has_critical_error = bool(
+            details["email"].get("missing") and details["phone"].get("missing")
+        )
+        has_warning = bool(
             details["email"].get("missing")
             or details["phone"].get("missing")
             or details["email"].get("format_valid") is False
             or details["phone"].get("format_valid") is False
             or details["email"].get("is_disposable")
             or details["email"].get("is_reserved")
+            or duplicates
+            or (dns_result and not dns_result.has_dns and not details["email"].get("is_disposable"))
         )
-        has_warning = bool(duplicates) or (dns_result and not dns_result.has_dns and not details["email"].get("is_disposable"))
 
         if has_critical_error:
             status = ValidationStatus.FAILED

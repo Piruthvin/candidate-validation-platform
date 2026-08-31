@@ -1,3 +1,4 @@
+# ---------- BUILDER ----------
 FROM python:3.12-slim AS builder
 
 WORKDIR /build
@@ -5,6 +6,7 @@ WORKDIR /build
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# ---------- RUNTIME ----------
 FROM python:3.12-slim
 
 RUN groupadd -r appuser && useradd -r -g appuser -d /app -s /sbin/nologin appuser
@@ -13,8 +15,7 @@ WORKDIR /app
 
 COPY --from=builder /usr/local /usr/local
 
-COPY app/ app/
-COPY scripts/ scripts/
+COPY . .
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \

@@ -96,13 +96,9 @@ async def main():
 
     # 6. Report endpoints
     print("\n[6] Report endpoints")
-    r = await measure("POST", "/api/v1/reports/latest", json_data={"candidate_id": "test-001"}, timeout=30.0)
-    print(f"  Report latest: {r['time']:.3f}s, status={r['status']}")
-    report["report_latest"] = r
-
-    r = await measure("POST", "/api/v1/reports/search", json_data={"page": 1, "page_size": 5}, timeout=30.0)
-    print(f"  Report search: {r['time']:.3f}s, status={r['status']}")
-    report["report_search"] = r
+    r = await measure("POST", "/api/v1/reports/blob", json_data={"blob_id": "test-blob-id"}, timeout=30.0)
+    print(f"  Report blob: {r['time']:.3f}s, status={r['status']}")
+    report["report_blob"] = r
 
     # Save
     with open("isolated_test_results.json", "w") as f:

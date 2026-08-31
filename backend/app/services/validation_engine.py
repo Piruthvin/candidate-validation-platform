@@ -185,10 +185,10 @@ class ValidationEngine:
             "resume_completeness": resume_completeness_evidence,
             "contact_validation": self.contact_validator.validate(resume),
             "education_validation": self.education_validator.validate(resume),
-            "experience_validation": self.experience_validator.validate(resume),
-            "timeline_validation": self.timeline_validator.validate(resume),
+            "experience_validation": self.experience_validator.validate(resume, ats_candidate=ats_candidate),
+            "timeline_validation": self.timeline_validator.validate(resume, ats_candidate=ats_candidate),
             "skills_validation": self.skills_validator.validate(resume),
-            "project_validation": self.project_validator.validate(resume),
+            "project_validation": self.project_validator.validate(resume, ats_candidate=ats_candidate),
             "certification_validation": self.certification_validator.validate(resume),
             "employment_pattern": self.employment_pattern_validator.validate(resume),
             "cross_field_validation": self.cross_field_validator.validate(

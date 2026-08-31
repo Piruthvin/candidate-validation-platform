@@ -1,7 +1,8 @@
 import logging
-from datetime import datetime, timezone
+from datetime import datetime
 
 from app.domain.models import ResumeData, ValidationEvidence, ValidationStatus
+from app.services.validators.validation_utils import parse_flexible
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +24,7 @@ class CertificationValidator:
         missing_issuer = 0
         old_dates = 0
         future_dates = 0
-        now = datetime.now(timezone.utc)
+        now_naive = datetime.now()
 
         for cert in certs:
             entry = {
@@ -42,16 +43,18 @@ class CertificationValidator:
 
             is_future = False
             if cert.date:
-                try:
-                    dt = datetime.fromisoformat(cert.date.replace("Z", "+00:00"))
-                    if dt.year < 2000:
+                dt = parse_flexible(cert.date)
+                if dt:
+                    if dt.tzinfo is not None:
+                        dt = dt.replace(tzinfo=None)
+                    if dt.year < 1990:
                         old_dates += 1
                         entry["issues"].append(f"Date appears too old ({dt.date()})")
-                    if dt > now:
+                    if dt > now_naive:
                         future_dates += 1
                         is_future = True
                         entry["issues"].append(f"Future date ({dt.date()})")
-                except (ValueError, TypeError):
+                else:
                     entry["issues"].append("Unparseable date format")
 
             entry["future_date"] = is_future
@@ -60,22 +63,24 @@ class CertificationValidator:
         for cd in cert_details:
             evidence.append("Certification")
             evidence.append(f"  {cd['name']}")
-            evidence.append(f"Issuer")
+            evidence.append("Issuer")
             evidence.append(f"  {cd['issuer']}")
-            evidence.append(f"Date")
+            evidence.append("Date")
             evidence.append(f"  {cd['date']}")
-            evidence.append(f"Future Date")
+            evidence.append("Future Date")
             evidence.append(f"  {'YES' if cd['future_date'] else 'NO'}")
             if cd["issues"]:
                 for issue in cd["issues"]:
                     evidence.append(f"  ⚠ {issue}")
             evidence.append("")
 
-        status = ValidationStatus.PASSED
-        if old_dates > 0 or future_dates > 0:
+        # Determine overall status based on collected issues and date checks
+        if future_dates > 0 or missing_name > 0:
             status = ValidationStatus.FAILED
-        elif missing_name > 0 or missing_issuer > 0:
+        elif old_dates > 0 or missing_issuer > 0 or any("Unparseable" in i for cd in cert_details for i in cd["issues"]):
             status = ValidationStatus.WARNING
+        else:
+            status = ValidationStatus.PASSED
 
         if status == ValidationStatus.PASSED:
             evidence.append(f"Certification validation passed. All {len(certs)} certification(s) have valid names, issuers, and dates.")

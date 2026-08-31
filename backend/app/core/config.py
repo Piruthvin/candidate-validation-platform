@@ -25,11 +25,10 @@ class Settings(BaseSettings):
     azure_storage_account_key: str | None = Field(default=None, alias="AZURE_STORAGE_ACCOUNT_KEY")
     azure_sas_expiry_hours: int = Field(default=24, alias="AZURE_SAS_EXPIRY_HOURS")
 
-    zoho_client_id: str | None = Field(default=None, alias="ZOHO_CLIENT_ID")
-    zoho_client_secret: str | None = Field(default=None, alias="ZOHO_CLIENT_SECRET")
-    zoho_refresh_token: str | None = Field(default=None, alias="ZOHO_REFRESH_TOKEN")
-    zoho_accounts_url: str = Field(default="https://accounts.zoho.in", alias="ZOHO_ACCOUNTS_URL")
-    zoho_api_base_url: str = Field(default="https://recruit.zoho.in/recruit/v2", alias="ZOHO_API_BASE_URL")
+    ats_proxy_base_url: str = Field(
+        default="https://zohorecruitapicredentials-byfnhqameuc3bxhv.eastus-01.azurewebsites.net/api/zohoproxyapp",
+        alias="ATS_PROXY_BASE_URL",
+    )
 
     company_request_timeout: int = Field(default=10, alias="COMPANY_REQUEST_TIMEOUT")
 
